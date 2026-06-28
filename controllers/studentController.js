@@ -1,4 +1,5 @@
 const Student = require('../models/Student');
+const User = require('../models/User');
 const catchAsync = require('../utils/catchAsync');
 
 /**
@@ -7,7 +8,7 @@ const catchAsync = require('../utils/catchAsync');
  * @access  Private (Admin / Teacher only)
  */
 const createStudent = catchAsync(async (req, res) => {
-  const { userId, studentId, name, class: studentClass, section, phone, parentPhone, address } = req.body;
+  const { name, email, phone, password, studentId, class: studentClass, section, parentPhone, address } = req.body;
 
   // We check if studentId already exists
   const existingStudent = await Student.findOne({ studentId });
@@ -16,15 +17,24 @@ const createStudent = catchAsync(async (req, res) => {
     throw new Error('Student with this Roll Number already exists');
   }
 
+  // Create User first
+  const user = await User.create({
+    name,
+    email: email || undefined,
+    phone: phone || undefined,
+    password,
+    role: 'student'
+  });
+
   const student = await Student.create({
-    userId, // Reference to the Auth User
+    userId: user._id, // Reference to the Auth User
     studentId,
     name,
     class: studentClass,
-    section,
+    section: section || 'A',
     phone,
-    parentPhone,
-    address,
+    parentPhone: parentPhone || phone,
+    address: address || 'N/A',
     // Note: profileImage will be handled via Cloudinary upload separately or passed in body
     profileImage: req.body.profileImage || 'https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg',
   });

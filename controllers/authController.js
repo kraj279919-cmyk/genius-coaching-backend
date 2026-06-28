@@ -8,20 +8,23 @@ const catchAsync = require('../utils/catchAsync');
  * @access  Public (or Admin only depending on business rules, we'll make it public for now)
  */
 const registerUser = catchAsync(async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, phone, password, role } = req.body;
 
   // Check if user already exists
-  const userExists = await User.findOne({ email });
+  let userExists;
+  if (email) userExists = await User.findOne({ email });
+  if (!userExists && phone) userExists = await User.findOne({ phone });
 
   if (userExists) {
     res.status(400); // Bad request
-    throw new Error('User already exists with this email');
+    throw new Error('User already exists with this email or phone');
   }
 
   // Create new user in the database
   const user = await User.create({
     name,
     email,
+    phone,
     password,
     role: role || 'student', // Default to student if no role provided
   });
@@ -47,10 +50,15 @@ const registerUser = catchAsync(async (req, res) => {
  * @access  Public
  */
 const loginUser = catchAsync(async (req, res) => {
-  const { email, password } = req.body;
+  const { identifier, email, password } = req.body;
 
-  // Find user by email
-  const user = await User.findOne({ email });
+  // Fallback to email if identifier is not explicitly provided (backward compatibility)
+  const loginId = identifier || email;
+
+  // Find user by email or phone
+  const user = await User.findOne({ 
+    $or: [{ email: loginId }, { phone: loginId }] 
+  });
 
   // Check if user exists and password matches
   if (user && (await user.matchPassword(password))) {

@@ -1,4 +1,5 @@
 const Teacher = require('../models/Teacher');
+const User = require('../models/User');
 const catchAsync = require('../utils/catchAsync');
 
 /**
@@ -7,7 +8,7 @@ const catchAsync = require('../utils/catchAsync');
  * @access  Private (Admin only)
  */
 const createTeacher = catchAsync(async (req, res) => {
-  const { userId, teacherId, name, subject, qualification, phone } = req.body;
+  const { name, email, phone, password, teacherId, subject, qualification } = req.body;
 
   const existingTeacher = await Teacher.findOne({ teacherId });
   if (existingTeacher) {
@@ -15,8 +16,17 @@ const createTeacher = catchAsync(async (req, res) => {
     throw new Error('Teacher with this ID already exists');
   }
 
+  // Create User first
+  const user = await User.create({
+    name,
+    email: email || undefined,
+    phone: phone || undefined,
+    password,
+    role: 'teacher'
+  });
+
   const teacher = await Teacher.create({
-    userId,
+    userId: user._id,
     teacherId,
     name,
     subject,
