@@ -50,14 +50,25 @@ app.use(express.json({ limit: '10kb' })); // Limit body size to prevent DoS
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
 // 5. Data Sanitization against NoSQL query injection
-app.use(mongoSanitize());
+// Custom middleware to avoid setting read-only req.query
+app.use((req, res, next) => {
+  if (req.body) req.body = mongoSanitize.sanitize(req.body);
+  if (req.params) req.params = mongoSanitize.sanitize(req.params);
+  next();
+});
 
 // 6. Data Sanitization against XSS
-app.use(xss());
+// Custom middleware to avoid setting read-only req.query
+const { clean } = require('xss-clean/lib/xss');
+app.use((req, res, next) => {
+  if (req.body) req.body = clean(req.body);
+  if (req.params) req.params = clean(req.params);
+  next();
+});
 
 // --- Test Route ---
 app.get('/', (req, res) => {
-  res.send('Genius Coaching Institute API is running...');
+  res.status(200).json({ success: true, message: "Genius Coaching Backend Live" });
 });
 
 // --- API Routes ---
