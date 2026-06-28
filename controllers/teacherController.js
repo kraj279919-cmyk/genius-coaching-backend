@@ -30,7 +30,7 @@ const createTeacher = catchAsync(async (req, res) => {
     teacherId,
     name,
     subject,
-    qualification,
+    qualification: qualification || 'N/A',
     phone,
     profileImage: req.body.profileImage || 'https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg',
   });
