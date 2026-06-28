@@ -46,7 +46,7 @@ const userSchema = new mongoose.Schema(
 userSchema.pre('save', async function (next) {
   // If the password field hasn't been modified, skip hashing
   if (!this.isModified('password')) {
-    next();
+    return next();
   }
 
   // Hash the password with bcrypt

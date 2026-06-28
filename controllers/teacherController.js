@@ -17,10 +17,13 @@ const createTeacher = catchAsync(async (req, res) => {
   }
 
   // Create User first
+  const cleanEmail = email ? email.trim().toLowerCase() : undefined;
+  const cleanPhone = phone ? phone.trim() : undefined;
+  
   const user = await User.create({
     name,
-    email: email || undefined,
-    phone: phone || undefined,
+    email: cleanEmail === '' ? undefined : cleanEmail,
+    phone: cleanPhone === '' ? undefined : cleanPhone,
     password,
     role: 'teacher'
   });
