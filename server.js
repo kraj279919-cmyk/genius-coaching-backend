@@ -105,6 +105,7 @@ app.use('/api/ai', require('./routes/aiRoutes'));
 app.use('/api/website', require('./routes/websiteRoutes'));
 app.use('/api/doubts', require('./routes/doubtRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
+app.use('/api/upload', require('./routes/uploadRoutes'));
 // --- Error Handling Middlewares ---
 // Handle 404 (Not Found) errors
 app.use(notFound);
