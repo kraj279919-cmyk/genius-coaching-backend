@@ -10,9 +10,26 @@ const studyMaterialSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Please add a description'],
     },
+    subject: {
+      type: String,
+      required: [true, 'Please specify the subject'],
+    },
+    type: {
+      type: String,
+      enum: ['pdf', 'video', 'link', 'note', 'image'],
+      default: 'note',
+    },
     fileUrl: {
       type: String,
       required: [true, 'Please provide the file URL'],
+    },
+    cloudinaryPublicId: {
+      type: String,
+    },
+    status: {
+      type: String,
+      enum: ['active', 'inactive'],
+      default: 'active',
     },
     class: {
       type: String,

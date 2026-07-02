@@ -92,6 +92,15 @@ const updateStudent = catchAsync(async (req, res) => {
     }
 
     const updatedStudent = await student.save();
+
+    // Sync auth User
+    const user = await User.findById(student.userId);
+    if (user) {
+      user.name = student.name;
+      user.phone = student.phone;
+      await user.save();
+    }
+
     res.json(updatedStudent);
   } else {
     res.status(404);
@@ -108,12 +117,82 @@ const deleteStudent = catchAsync(async (req, res) => {
   const student = await Student.findById(req.params.id);
 
   if (student) {
+    const userId = student.userId;
     await student.deleteOne();
+    
+    // Also delete the auth User
+    if (userId) {
+      await User.findByIdAndDelete(userId);
+    }
+    
     res.json({ message: 'Student removed successfully' });
   } else {
     res.status(404);
     throw new Error('Student not found');
   }
+});
+
+/**
+ * @desc    Deactivate a student
+ * @route   PATCH /api/students/:id/deactivate
+ * @access  Private (Admin)
+ */
+const deactivateStudent = catchAsync(async (req, res) => {
+  const student = await Student.findById(req.params.id);
+  if (!student) {
+    res.status(404);
+    throw new Error('Student not found');
+  }
+  student.status = 'inactive';
+  await student.save();
+
+  const user = await User.findById(student.userId);
+  if (user) {
+    user.status = 'inactive';
+    await user.save();
+  }
+  res.json({ message: 'Student deactivated safely' });
+});
+
+/**
+ * @desc    Preview class promotion
+ * @route   POST /api/students/promote-class/preview
+ * @access  Private (Admin)
+ */
+const promoteClassPreview = catchAsync(async (req, res) => {
+  const { fromClass } = req.body;
+  if (!fromClass) {
+    res.status(400); throw new Error('fromClass is required');
+  }
+  const count = await Student.countDocuments({ class: fromClass, status: 'active' });
+  res.json({ count, message: `${count} active students found in ${fromClass} ready for promotion` });
+});
+
+/**
+ * @desc    Execute class promotion
+ * @route   POST /api/students/promote-class/execute
+ * @access  Private (Admin)
+ */
+const promoteClassExecute = catchAsync(async (req, res) => {
+  const { fromClass, toClass, academicYear } = req.body;
+  if (!fromClass || !toClass || !academicYear) {
+    res.status(400); throw new Error('fromClass, toClass, and academicYear are required');
+  }
+  const students = await Student.find({ class: fromClass, status: 'active' });
+  
+  let promotedCount = 0;
+  for (const student of students) {
+    student.previousClassHistory.push({
+      class: student.class,
+      academicYear: student.academicYear || 'Unknown',
+      promotedAt: new Date()
+    });
+    student.class = toClass;
+    student.academicYear = academicYear;
+    await student.save();
+    promotedCount++;
+  }
+  res.json({ message: `Successfully promoted ${promotedCount} students to ${toClass}` });
 });
 
 module.exports = {
@@ -122,4 +201,7 @@ module.exports = {
   getStudentById,
   updateStudent,
   deleteStudent,
+  deactivateStudent,
+  promoteClassPreview,
+  promoteClassExecute,
 };

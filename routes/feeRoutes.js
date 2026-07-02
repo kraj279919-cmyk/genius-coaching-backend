@@ -3,6 +3,8 @@ const router = express.Router();
 const {
   createFeeRecord,
   getFeeRecords,
+  getFeeSummary,
+  getFeesByStudentId,
   getFeeRecordById,
   updateFeeRecord,
   deleteFeeRecord,
@@ -12,13 +14,20 @@ const { authorize } = require('../middleware/roleMiddleware');
 
 router.use(protect);
 
+router.route('/summary')
+  .get(authorize('admin', 'director'), getFeeSummary);
+
+router.route('/student/:studentId')
+  .get(getFeesByStudentId);
+
 router.route('/')
-  .get(getFeeRecords)
-  .post(authorize('admin', 'coDirector'), createFeeRecord);
+  .get(authorize('admin', 'director'), getFeeRecords)
+  .post(authorize('admin', 'director'), createFeeRecord);
 
 router.route('/:id')
-  .get(getFeeRecordById)
-  .put(authorize('admin', 'coDirector'), updateFeeRecord)
-  .delete(authorize('admin'), deleteFeeRecord); // Only true Admin can delete fee records
+  .get(authorize('admin', 'director', 'student'), getFeeRecordById)
+  .put(authorize('admin', 'director'), updateFeeRecord)
+  .patch(authorize('admin', 'director'), updateFeeRecord)
+  .delete(authorize('admin', 'director'), deleteFeeRecord);
 
 module.exports = router;

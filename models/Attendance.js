@@ -14,12 +14,15 @@ const attendanceSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['Present', 'Absent', 'Late', 'Leave'],
+      enum: ['Present', 'Absent', 'Late', 'Leave', 'present', 'absent', 'late', 'leave'],
       required: true,
     },
     class: {
       type: String,
       required: true,
+    },
+    section: {
+      type: String,
     },
     markedBy: {
       type: mongoose.Schema.Types.ObjectId,

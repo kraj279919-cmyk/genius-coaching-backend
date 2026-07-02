@@ -27,7 +27,16 @@ const resultSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    percentage: {
+      type: Number,
+    },
+    grade: {
+      type: String,
+    },
     remarks: {
+      type: String,
+    },
+    reportUrl: {
       type: String,
     },
     uploadedBy: {

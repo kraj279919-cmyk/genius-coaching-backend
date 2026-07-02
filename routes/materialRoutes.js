@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   createMaterial,
   getMaterials,
+  getMaterialsByClass,
   getMaterialById,
   updateMaterial,
   deleteMaterial,
@@ -12,13 +13,17 @@ const { authorize } = require('../middleware/roleMiddleware');
 
 router.use(protect);
 
+router.route('/class/:className')
+  .get(getMaterialsByClass);
+
 router.route('/')
   .get(getMaterials)
-  .post(authorize('admin', 'teacher'), createMaterial);
+  .post(authorize('admin', 'director', 'teacher'), createMaterial);
 
 router.route('/:id')
   .get(getMaterialById)
-  .put(authorize('admin', 'teacher'), updateMaterial)
-  .delete(authorize('admin', 'teacher'), deleteMaterial);
+  .put(authorize('admin', 'director', 'teacher'), updateMaterial)
+  .patch(authorize('admin', 'director', 'teacher'), updateMaterial)
+  .delete(authorize('admin', 'director', 'teacher'), deleteMaterial);
 
 module.exports = router;

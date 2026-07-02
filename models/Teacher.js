@@ -31,6 +31,30 @@ const teacherSchema = new mongoose.Schema(
     profileImage: {
       type: String,
     },
+    email: {
+      type: String,
+    },
+    address: {
+      type: String,
+    },
+    experience: {
+      type: String,
+    },
+    joiningDate: {
+      type: Date,
+      default: Date.now,
+    },
+    status: {
+      type: String,
+      enum: ['active', 'inactive', 'archived', 'deleted'],
+      default: 'active',
+    },
+    assignedClasses: [{
+      type: String,
+    }],
+    cloudinaryPublicId: {
+      type: String,
+    },
   },
   {
     timestamps: true,

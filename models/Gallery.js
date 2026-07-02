@@ -10,9 +10,21 @@ const gallerySchema = new mongoose.Schema(
       type: String,
       required: [true, 'Image URL is required'], // Cloudinary URL
     },
+    cloudinaryPublicId: {
+      type: String,
+    },
     category: {
       type: String,
-      default: 'General', // e.g., 'Events', 'Achievements', 'Classroom'
+      enum: ['classroom', 'event', 'topper', 'festival', 'smart-class', 'achievement', 'other'],
+      default: 'other',
+    },
+    description: {
+      type: String,
+    },
+    status: {
+      type: String,
+      enum: ['active', 'inactive'],
+      default: 'active',
     },
     uploadedBy: {
       type: mongoose.Schema.Types.ObjectId,

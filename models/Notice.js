@@ -18,9 +18,36 @@ const noticeSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    category: {
+      type: String,
+      enum: ['general', 'holiday', 'exam', 'fee', 'admission', 'event', 'urgent'],
+      default: 'general',
+    },
+    targetAudience: {
+      type: String,
+      enum: ['all', 'teachers', 'students', 'class'],
+      default: 'all',
+    },
+    targetClass: {
+      type: String,
+    },
+    priority: {
+      type: String,
+      enum: ['low', 'normal', 'high', 'urgent'],
+      default: 'normal',
+    },
+    status: {
+      type: String,
+      enum: ['draft', 'published', 'expired'],
+      default: 'published',
+    },
+    expiryDate: {
+      type: Date,
+    },
   },
   {
     timestamps: true,
+
   }
 );
 

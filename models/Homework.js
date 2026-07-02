@@ -25,6 +25,16 @@ const homeworkSchema = new mongoose.Schema(
     attachmentUrl: {
       type: String, // Cloudinary URL for any attached PDF or image
     },
+    attachmentType: {
+      type: String,
+      enum: ['pdf', 'image', 'link', 'none'],
+      default: 'none',
+    },
+    status: {
+      type: String,
+      enum: ['active', 'completed', 'expired'],
+      default: 'active',
+    },
     assignedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User', // Teacher ID

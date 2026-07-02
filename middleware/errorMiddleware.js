@@ -13,21 +13,57 @@ const notFound = (req, res, next) => {
  * Formats all errors into a clean JSON response instead of crashing the server or sending HTML
  */
 const errorHandler = (err, req, res, next) => {
-  // If status is 200 but we have an error, default to 500 (Internal Server Error)
-  const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
-  
-  res.status(statusCode);
-  
-  const isProduction = process.env.NODE_ENV === 'production';
-  // If it's a 500 error in production, hide the internal error message
-  const safeMessage = (isProduction && statusCode === 500) 
-    ? 'Internal Server Error' 
-    : err.message;
+  let statusCode = res.statusCode === 200 ? 500 : res.statusCode;
+  let message = err.message || 'Internal Server Error';
 
-  res.json({
-    message: safeMessage,
+  // 1. Mongoose Bad ObjectId
+  if (err.name === 'CastError') {
+    message = 'Resource not found or invalid ID format';
+    statusCode = 404;
+  }
+
+  // 2. Mongoose Duplicate Key Error
+  if (err.code === 11000 || (err.message && err.message.includes('E11000'))) {
+    // Attempt to extract the field name if possible, otherwise generic message
+    let field = 'a unique field';
+    if (err.keyValue) {
+      field = Object.keys(err.keyValue)[0];
+    } else if (err.message) {
+      const match = err.message.match(/index:\s+([a-z_]+)\s+dup/i);
+      if (match && match[1]) field = match[1].replace('_1', '');
+    }
+    message = `Duplicate value entered for ${field}. Please choose another value.`;
+    statusCode = 400;
+  }
+
+  // 3. Mongoose Validation Error
+  if (err.name === 'ValidationError') {
+    const messages = Object.values(err.errors).map(val => val.message);
+    message = `Validation failed: ${messages.join(', ')}`;
+    statusCode = 400;
+  }
+
+  // Phase 13.8 - Log error to database
+  try {
+    const ErrorLog = require('../models/ErrorLog');
+    // Ensure we don't block the response if db fails
+    ErrorLog.create({
+      route: req.originalUrl,
+      statusCode,
+      message,
+      stack: err.stack,
+      userId: req.user ? req.user._id : null,
+      userRole: req.user ? req.user.role : null
+    }).catch(console.error);
+  } catch (e) {
+    // Ignore require error if not loaded
+  }
+
+  res.status(statusCode).json({
+    success: false,
+    message,
     // Only show the stack trace if we are in development mode
-    stack: isProduction ? null : err.stack,
+    stack: process.env.NODE_ENV === 'production' ? null : err.stack,
   });
 };
 

@@ -8,19 +8,27 @@ const catchAsync = require('../utils/catchAsync');
  * @access  Private (Admin / Teacher)
  */
 const createHomework = catchAsync(async (req, res) => {
-  const { title, description, subject, class: targetClass, dueDate, attachmentUrl } = req.body;
+  const { title, description, subject, class: targetClass, dueDate, attachmentUrl, attachmentType, status } = req.body;
+
+  if (!title) { res.status(400); throw new Error('Title required'); }
+  if (!targetClass) { res.status(400); throw new Error('Class required'); }
+  if (!subject) { res.status(400); throw new Error('Subject required'); }
+  if (!dueDate) { res.status(400); throw new Error('Due date required'); }
 
   const homework = await Homework.create({
     title,
-    description,
+    description: description || '',
     subject,
     class: targetClass,
     dueDate,
     attachmentUrl,
+    attachmentType: attachmentType || 'none',
+    status: status || 'active',
     assignedBy: req.user._id,
   });
 
-  res.status(201).json(homework);
+  const populated = await Homework.findById(homework._id).populate('assignedBy', 'name role');
+  res.status(201).json(populated);
 });
 
 /**
@@ -31,18 +39,39 @@ const createHomework = catchAsync(async (req, res) => {
 const getHomework = catchAsync(async (req, res) => {
   const filter = {};
   
-  // Student can only see homework assigned to their class
   if (req.user.role === 'student') {
     const student = await Student.findOne({ userId: req.user._id });
-    if (student) {
-      filter.class = student.class;
-    }
-  } else if (req.query.class) {
-    // Admins and teachers can filter by class
-    filter.class = req.query.class;
+    if (!student) { res.status(404); throw new Error('Student profile not found'); }
+    filter.class = student.class;
+    filter.status = 'active'; // Students see active homework by default unless specified
+  } else {
+    if (req.query.class) filter.class = req.query.class;
+    if (req.query.subject) filter.subject = req.query.subject;
+    if (req.query.status) filter.status = req.query.status;
   }
 
   const homeworkList = await Homework.find(filter)
+    .sort({ createdAt: -1 })
+    .populate('assignedBy', 'name role');
+
+  res.json(homeworkList);
+});
+
+/**
+ * @desc    Get homework by class
+ * @route   GET /api/homework/class/:className
+ * @access  Private
+ */
+const getHomeworkByClass = catchAsync(async (req, res) => {
+  if (req.user.role === 'student') {
+    const student = await Student.findOne({ userId: req.user._id });
+    if (!student || student.class !== req.params.className) {
+      res.status(403);
+      throw new Error('Unauthorized access to this class homework');
+    }
+  }
+
+  const homeworkList = await Homework.find({ class: req.params.className })
     .sort({ createdAt: -1 })
     .populate('assignedBy', 'name role');
 
@@ -59,12 +88,11 @@ const getHomeworkById = catchAsync(async (req, res) => {
     .populate('assignedBy', 'name role');
 
   if (homework) {
-    // Student can only view if it matches their class
     if (req.user.role === 'student') {
       const student = await Student.findOne({ userId: req.user._id });
       if (!student || homework.class !== student.class) {
         res.status(403);
-        throw new Error('Not authorized to view this homework');
+        throw new Error('Unauthorized access');
       }
     }
     res.json(homework);
@@ -76,20 +104,27 @@ const getHomeworkById = catchAsync(async (req, res) => {
 
 /**
  * @desc    Update homework
- * @route   PUT /api/homework/:id
+ * @route   PATCH /api/homework/:id
  * @access  Private (Admin / Teacher)
  */
 const updateHomework = catchAsync(async (req, res) => {
   const homework = await Homework.findById(req.params.id);
 
   if (homework) {
-    homework.title = req.body.title || homework.title;
-    homework.description = req.body.description || homework.description;
-    homework.dueDate = req.body.dueDate || homework.dueDate;
-    if (req.body.attachmentUrl) homework.attachmentUrl = req.body.attachmentUrl;
+    const { title, description, subject, class: targetClass, dueDate, attachmentUrl, attachmentType, status } = req.body;
+    
+    if (title) homework.title = title;
+    if (description !== undefined) homework.description = description;
+    if (subject) homework.subject = subject;
+    if (targetClass) homework.class = targetClass;
+    if (dueDate) homework.dueDate = dueDate;
+    if (attachmentUrl !== undefined) homework.attachmentUrl = attachmentUrl;
+    if (attachmentType) homework.attachmentType = attachmentType;
+    if (status) homework.status = status;
 
     const updatedHomework = await homework.save();
-    res.json(updatedHomework);
+    const populated = await Homework.findById(updatedHomework._id).populate('assignedBy', 'name role');
+    res.json(populated);
   } else {
     res.status(404);
     throw new Error('Homework not found');
@@ -116,6 +151,7 @@ const deleteHomework = catchAsync(async (req, res) => {
 module.exports = {
   createHomework,
   getHomework,
+  getHomeworkByClass,
   getHomeworkById,
   updateHomework,
   deleteHomework,

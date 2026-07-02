@@ -3,7 +3,9 @@ const router = express.Router();
 const {
   createAttendance,
   getAttendance,
-  getAttendanceById,
+  getAttendanceByStudent,
+  getAttendanceByClass,
+  getAttendanceSummary,
   updateAttendance,
   deleteAttendance,
 } = require('../controllers/attendanceController');
@@ -12,13 +14,22 @@ const { authorize } = require('../middleware/roleMiddleware');
 
 router.use(protect);
 
+router.route('/summary')
+  .get(authorize('admin', 'director'), getAttendanceSummary);
+
+router.route('/class/:className')
+  .get(authorize('admin', 'director', 'teacher'), getAttendanceByClass);
+
+router.route('/student/:studentId')
+  .get(getAttendanceByStudent);
+
 router.route('/')
-  .get(getAttendance) // Anyone logged in can view
-  .post(authorize('admin', 'teacher'), createAttendance); // Only Admin/Teacher can create
+  .get(getAttendance)
+  .post(authorize('admin', 'director', 'teacher'), createAttendance);
 
 router.route('/:id')
-  .get(getAttendanceById)
-  .put(authorize('admin', 'teacher'), updateAttendance)
-  .delete(authorize('admin', 'teacher'), deleteAttendance);
+  .put(authorize('admin', 'director', 'teacher'), updateAttendance)
+  .patch(authorize('admin', 'director', 'teacher'), updateAttendance)
+  .delete(authorize('admin', 'director', 'teacher'), deleteAttendance);
 
 module.exports = router;

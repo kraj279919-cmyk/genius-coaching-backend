@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   createNotice,
   getNotices,
+  getPublicNotices,
   getNoticeById,
   updateNotice,
   deleteNotice,
@@ -10,16 +11,19 @@ const {
 const { protect } = require('../middleware/authMiddleware');
 const { authorize } = require('../middleware/roleMiddleware');
 
+// Public route for Website Sync
+router.get('/public', getPublicNotices);
+
+// Protected routes
 router.use(protect);
 
 router.route('/')
-  .get(getNotices) // Everyone can see notices
-  // Only admins, coDirectors, and teachers can create notices
-  .post(authorize('admin', 'coDirector', 'teacher'), createNotice);
+  .get(getNotices) // All authenticated users can see appropriate notices
+  .post(authorize('admin', 'director', 'teacher'), createNotice);
 
 router.route('/:id')
   .get(getNoticeById)
-  .put(authorize('admin', 'coDirector', 'teacher'), updateNotice)
-  .delete(authorize('admin', 'coDirector', 'teacher'), deleteNotice);
+  .put(authorize('admin', 'director', 'teacher'), updateNotice)
+  .delete(authorize('admin', 'director', 'teacher'), deleteNotice);
 
 module.exports = router;

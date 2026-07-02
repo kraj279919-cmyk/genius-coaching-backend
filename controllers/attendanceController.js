@@ -3,23 +3,46 @@ const Student = require('../models/Student');
 const catchAsync = require('../utils/catchAsync');
 
 /**
- * @desc    Mark attendance for a student
+ * @desc    Mark attendance for a student (or multiple students)
  * @route   POST /api/attendance
  * @access  Private (Admin / Teacher)
  */
 const createAttendance = catchAsync(async (req, res) => {
-  const { studentId, date, status, class: studentClass, remarks } = req.body;
+  const { studentId, date, status, class: studentClass, section, remarks } = req.body;
+
+  if (!studentId || !date || !status || !studentClass) {
+    res.status(400);
+    throw new Error('Student, date, status, and class are required');
+  }
+
+  // Check if attendance already exists for this student on this date
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(date);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const existing = await Attendance.findOne({
+    studentId,
+    date: { $gte: startOfDay, $lte: endOfDay }
+  });
+
+  if (existing) {
+    res.status(400);
+    throw new Error('Attendance already marked for this date');
+  }
 
   const attendance = await Attendance.create({
     studentId,
-    date: date || Date.now(),
-    status,
+    date,
+    status: status.toLowerCase(),
     class: studentClass,
+    section,
     markedBy: req.user._id,
     remarks,
   });
 
-  res.status(201).json(attendance);
+  const populated = await Attendance.findById(attendance._id).populate('studentId', 'name studentId class section');
+  res.status(201).json(populated);
 });
 
 /**
@@ -30,7 +53,6 @@ const createAttendance = catchAsync(async (req, res) => {
 const getAttendance = catchAsync(async (req, res) => {
   const filter = {};
   
-  // Student can only see their own attendance
   if (req.user.role === 'student') {
     const student = await Student.findOne({ userId: req.user._id });
     if (!student) {
@@ -39,59 +61,132 @@ const getAttendance = catchAsync(async (req, res) => {
     }
     filter.studentId = student._id;
   } else {
-    // Teachers and Admins can filter by class or specific student
     if (req.query.class) filter.class = req.query.class;
-    if (req.query.studentId) filter.studentId = req.query.studentId;
+    if (req.query.date) {
+      const startOfDay = new Date(req.query.date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(req.query.date);
+      endOfDay.setHours(23, 59, 59, 999);
+      filter.date = { $gte: startOfDay, $lte: endOfDay };
+    }
   }
 
   const records = await Attendance.find(filter)
     .sort({ date: -1 })
-    .populate('studentId', 'name studentId')
+    .populate('studentId', 'name studentId class section')
     .populate('markedBy', 'name');
 
   res.json(records);
 });
 
 /**
- * @desc    Get specific attendance record by ID
- * @route   GET /api/attendance/:id
+ * @desc    Get attendance by student ID
+ * @route   GET /api/attendance/student/:studentId
  * @access  Private
  */
-const getAttendanceById = catchAsync(async (req, res) => {
-  const record = await Attendance.findById(req.params.id)
-    .populate('studentId', 'name studentId')
-    .populate('markedBy', 'name');
-
-  if (record) {
-    // If student, ensure it belongs to them
-    if (req.user.role === 'student') {
-      const student = await Student.findOne({ userId: req.user._id });
-      if (!student || record.studentId._id.toString() !== student._id.toString()) {
-        res.status(403);
-        throw new Error('Not authorized to view this record');
-      }
+const getAttendanceByStudent = catchAsync(async (req, res) => {
+  if (req.user.role === 'student') {
+    const student = await Student.findOne({ userId: req.user._id });
+    if (!student || student._id.toString() !== req.params.studentId) {
+      res.status(403);
+      throw new Error('Not authorized to view these records');
     }
-    res.json(record);
-  } else {
-    res.status(404);
-    throw new Error('Attendance record not found');
   }
+
+  const records = await Attendance.find({ studentId: req.params.studentId })
+    .sort({ date: -1 })
+    .populate('studentId', 'name studentId class section')
+    .populate('markedBy', 'name');
+    
+  res.json(records);
+});
+
+/**
+ * @desc    Get attendance by class
+ * @route   GET /api/attendance/class/:className
+ * @access  Private (Admin / Teacher)
+ */
+const getAttendanceByClass = catchAsync(async (req, res) => {
+  if (req.user.role === 'student') {
+    res.status(403);
+    throw new Error('Students cannot view class attendance');
+  }
+
+  const filter = { class: req.params.className };
+  if (req.query.date) {
+    const startOfDay = new Date(req.query.date);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(req.query.date);
+    endOfDay.setHours(23, 59, 59, 999);
+    filter.date = { $gte: startOfDay, $lte: endOfDay };
+  }
+
+  const records = await Attendance.find(filter)
+    .sort({ date: -1 })
+    .populate('studentId', 'name studentId class section')
+    .populate('markedBy', 'name');
+    
+  res.json(records);
+});
+
+/**
+ * @desc    Get summary stats (dashboard sync)
+ * @route   GET /api/attendance/summary
+ * @access  Private (Admin)
+ */
+const getAttendanceSummary = catchAsync(async (req, res) => {
+  if (req.user.role === 'student') {
+    res.status(403);
+    throw new Error('Unauthorized');
+  }
+
+  // Get today's attendance summary
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const todaysRecords = await Attendance.find({
+    date: { $gte: startOfDay, $lte: endOfDay }
+  });
+
+  const total = todaysRecords.length;
+  let present = 0, absent = 0, late = 0, leave = 0;
+
+  todaysRecords.forEach(r => {
+    const s = r.status.toLowerCase();
+    if (s === 'present') present++;
+    else if (s === 'absent') absent++;
+    else if (s === 'late') late++;
+    else if (s === 'leave') leave++;
+  });
+
+  res.json({
+    date: startOfDay,
+    total,
+    present,
+    absent,
+    late,
+    leave,
+    percentage: total > 0 ? Math.round(((present + late) / total) * 100) : 0
+  });
 });
 
 /**
  * @desc    Update an attendance record
- * @route   PUT /api/attendance/:id
+ * @route   PATCH /api/attendance/:id
  * @access  Private (Admin / Teacher)
  */
 const updateAttendance = catchAsync(async (req, res) => {
   const record = await Attendance.findById(req.params.id);
 
   if (record) {
-    record.status = req.body.status || record.status;
-    record.remarks = req.body.remarks || record.remarks;
+    record.status = req.body.status ? req.body.status.toLowerCase() : record.status;
+    record.remarks = req.body.remarks !== undefined ? req.body.remarks : record.remarks;
     
     const updatedRecord = await record.save();
-    res.json(updatedRecord);
+    const populated = await Attendance.findById(updatedRecord._id).populate('studentId', 'name studentId class section');
+    res.json(populated);
   } else {
     res.status(404);
     throw new Error('Attendance record not found');
@@ -118,7 +213,9 @@ const deleteAttendance = catchAsync(async (req, res) => {
 module.exports = {
   createAttendance,
   getAttendance,
-  getAttendanceById,
+  getAttendanceByStudent,
+  getAttendanceByClass,
+  getAttendanceSummary,
   updateAttendance,
   deleteAttendance,
 };

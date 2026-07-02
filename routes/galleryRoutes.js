@@ -1,29 +1,31 @@
 const express = require('express');
 const router = express.Router();
 const {
+  getGallery,
+  getPublicGallery,
+  getGalleryById,
   createGalleryImage,
-  getGalleryImages,
-  getGalleryImageById,
   updateGalleryImage,
   deleteGalleryImage,
 } = require('../controllers/galleryController');
 const { protect } = require('../middleware/authMiddleware');
 const { authorize } = require('../middleware/roleMiddleware');
 
-// Public routes (anyone can see the gallery)
-router.route('/')
-  .get(getGalleryImages);
-router.route('/:id')
-  .get(getGalleryImageById);
+// Public route (no auth required)
+router.route('/public')
+  .get(getPublicGallery);
 
 // Protected routes
 router.use(protect);
 
 router.route('/')
-  .post(authorize('admin', 'coDirector'), createGalleryImage);
+  .get(authorize('admin', 'director'), getGallery)
+  .post(authorize('admin', 'director'), createGalleryImage);
 
 router.route('/:id')
-  .put(authorize('admin', 'coDirector'), updateGalleryImage)
-  .delete(authorize('admin', 'coDirector'), deleteGalleryImage);
+  .get(getGalleryById)
+  .patch(authorize('admin', 'director'), updateGalleryImage)
+  .put(authorize('admin', 'director'), updateGalleryImage)
+  .delete(authorize('admin', 'director'), deleteGalleryImage);
 
 module.exports = router;

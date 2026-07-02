@@ -1,9 +1,29 @@
 const express = require('express');
 const router = express.Router();
-const { generateResponse } = require('../controllers/aiController');
 const { protect } = require('../middleware/authMiddleware');
-const { adminOnly } = require('../middleware/roleMiddleware');
+const { authorize } = require('../middleware/roleMiddleware');
+const {
+  generateNotice,
+  generateContent,
+  generateTest,
+  analyzeResult,
+  analyzeAttendance,
+  chatAssistant
+} = require('../controllers/aiController');
 
-router.post('/generate', protect, adminOnly, generateResponse);
+// All AI routes require authentication
+router.use(protect);
+
+// Director only
+router.post('/notice-writer', authorize('admin', 'director'), generateNotice);
+router.post('/content-writer', authorize('admin', 'director'), generateContent);
+
+// Teacher/Admin
+router.post('/test-generator', authorize('admin', 'director', 'teacher'), generateTest);
+router.post('/result-analysis', authorize('admin', 'director', 'teacher'), analyzeResult);
+router.post('/attendance-analysis', authorize('admin', 'director', 'teacher'), analyzeAttendance);
+
+// Everyone
+router.post('/chat', chatAssistant);
 
 module.exports = router;

@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   createHomework,
   getHomework,
+  getHomeworkByClass,
   getHomeworkById,
   updateHomework,
   deleteHomework,
@@ -12,13 +13,17 @@ const { authorize } = require('../middleware/roleMiddleware');
 
 router.use(protect);
 
+router.route('/class/:className')
+  .get(getHomeworkByClass);
+
 router.route('/')
-  .get(getHomework) // Students can view
-  .post(authorize('admin', 'teacher'), createHomework);
+  .get(getHomework)
+  .post(authorize('admin', 'director', 'teacher'), createHomework);
 
 router.route('/:id')
   .get(getHomeworkById)
-  .put(authorize('admin', 'teacher'), updateHomework)
-  .delete(authorize('admin', 'teacher'), deleteHomework);
+  .put(authorize('admin', 'director', 'teacher'), updateHomework)
+  .patch(authorize('admin', 'director', 'teacher'), updateHomework)
+  .delete(authorize('admin', 'director', 'teacher'), deleteHomework);
 
 module.exports = router;

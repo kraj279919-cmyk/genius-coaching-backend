@@ -66,13 +66,24 @@ app.use((req, res, next) => {
   next();
 });
 
+// Phase 13.8 - Request Monitor Middleware
+const requestMonitor = require('./middleware/requestMonitor');
+app.use(requestMonitor);
+
 // --- Test Route ---
 app.get('/', (req, res) => {
   res.status(200).json({ success: true, message: "Genius Coaching Backend Live" });
 });
 
+// Phase 13.8 - Version API
+const { getVersionInfo } = require('./controllers/opsController');
+app.get('/api/version', getVersionInfo);
+
 // --- API Routes ---
+app.use('/api/ops', require('./routes/opsRoutes'));
+app.use('/api/ai', require('./routes/aiRoutes'));
 app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/students', require('./routes/studentRoutes'));
 app.use('/api/teachers', require('./routes/teacherRoutes'));
 app.use('/api/notices', require('./routes/noticeRoutes'));
@@ -93,6 +104,7 @@ app.use('/api/analytics', require('./routes/analyticsRoutes'));
 app.use('/api/ai', require('./routes/aiRoutes'));
 app.use('/api/website', require('./routes/websiteRoutes'));
 app.use('/api/doubts', require('./routes/doubtRoutes'));
+app.use('/api/admin', require('./routes/adminRoutes'));
 // --- Error Handling Middlewares ---
 // Handle 404 (Not Found) errors
 app.use(notFound);

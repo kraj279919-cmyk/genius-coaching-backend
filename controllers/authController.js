@@ -55,13 +55,30 @@ const loginUser = catchAsync(async (req, res) => {
   // Fallback to email if identifier is not explicitly provided (backward compatibility)
   const loginId = identifier || email;
 
+  if (!loginId || !password) {
+    res.status(400);
+    throw new Error('Please provide email/phone and password');
+  }
+
+  // Detect if loginId is an email or phone
+  let query = {};
+  if (loginId.includes('@')) {
+    query.email = loginId.toLowerCase();
+  } else {
+    query.phone = loginId;
+  }
+
   // Find user by email or phone
-  const user = await User.findOne({ 
-    $or: [{ email: loginId }, { phone: loginId }] 
-  });
+  const user = await User.findOne(query);
 
   // Check if user exists and password matches
   if (user && (await user.matchPassword(password))) {
+    // Check if account is active (optional depending on schema, but good practice)
+    if (user.status === 'inactive') {
+      res.status(403);
+      throw new Error('Account is inactive. Please contact administration.');
+    }
+
     res.json({
       _id: user._id,
       name: user.name,
@@ -72,7 +89,7 @@ const loginUser = catchAsync(async (req, res) => {
     });
   } else {
     res.status(401); // Unauthorized
-    throw new Error('Invalid email or password');
+    throw new Error('Invalid credentials');
   }
 });
 

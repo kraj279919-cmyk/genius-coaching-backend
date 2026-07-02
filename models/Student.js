@@ -32,17 +32,39 @@ const studentSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Please add student phone number'],
     },
-    parentPhone: {
-      type: String,
-      required: [true, 'Please add parent phone number'],
-    },
     address: {
       type: String,
       required: [true, 'Please add residential address'],
     },
+    fatherName: { type: String },
+    motherName: { type: String },
+    guardianName: { type: String },
+    parentPhone: { type: String },
+    alternateMobile: { type: String },
+    emergencyContact: { type: String },
     profileImage: {
       type: String,
     },
+    admissionDate: {
+      type: Date,
+      default: Date.now,
+    },
+    status: {
+      type: String,
+      enum: ['active', 'inactive', 'archived', 'deleted'],
+      default: 'active',
+    },
+    academicYear: {
+      type: String,
+      default: '2025-26',
+    },
+    previousClassHistory: [
+      {
+        class: String,
+        academicYear: String,
+        promotedAt: Date,
+      }
+    ],
   },
   {
     timestamps: true,

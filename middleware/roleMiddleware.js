@@ -16,8 +16,8 @@ const authorize = (...roles) => {
 };
 
 // Convenience specific role middlewares
-const adminOnly = authorize('admin');
-const teacherOnly = authorize('teacher', 'admin'); // admin can also do teacher things usually
-const studentOnly = authorize('student', 'admin');
+const adminOnly = authorize('admin', 'director');
+const teacherOnly = authorize('teacher', 'admin', 'director'); // admin can also do teacher things usually
+const studentOnly = authorize('student', 'admin', 'director');
 
 module.exports = { authorize, adminOnly, teacherOnly, studentOnly };

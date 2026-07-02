@@ -27,10 +27,11 @@ const userSchema = new mongoose.Schema(
       required: [true, 'Please add a password'],
       minlength: 6, // Passwords must be at least 6 characters
     },
-    role: {
+    role: {},
+    status: {
       type: String,
-      enum: ['admin', 'coDirector', 'teacher', 'student'],
-      default: 'student', // Default role is student
+      enum: ['active', 'inactive', 'archived', 'deleted'],
+      default: 'active',
     },
     profileImage: {
       type: String,
@@ -43,10 +44,10 @@ const userSchema = new mongoose.Schema(
 );
 
 // Encrypt password before saving to the database
-userSchema.pre('save', async function (next) {
+userSchema.pre('save', async function () {
   // If the password field hasn't been modified, skip hashing
   if (!this.isModified('password')) {
-    return next();
+    return;
   }
 
   // Hash the password with bcrypt
