@@ -27,7 +27,11 @@ const userSchema = new mongoose.Schema(
       required: [true, 'Please add a password'],
       minlength: 6, // Passwords must be at least 6 characters
     },
-    role: {},
+    role: {
+      type: String,
+      enum: ['student', 'teacher', 'admin', 'director'],
+      default: 'student',
+    },
     status: {
       type: String,
       enum: ['active', 'inactive', 'archived', 'deleted'],

@@ -20,10 +20,10 @@ router.route('/:id')
 router.use(protect);
 
 router.route('/')
-  .post(authorize('admin'), createCourse);
+  .post(authorize('admin', 'director'), createCourse);
 
 router.route('/:id')
-  .put(authorize('admin'), updateCourse)
-  .delete(authorize('admin'), deleteCourse);
+  .put(authorize('admin', 'director'), updateCourse)
+  .delete(authorize('admin', 'director'), deleteCourse);
 
 module.exports = router;

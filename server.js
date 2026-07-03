@@ -101,7 +101,6 @@ app.use('/api/announcements', require('./routes/announcementRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 app.use('/api/enquiries', require('./routes/enquiryRoutes'));
 app.use('/api/analytics', require('./routes/analyticsRoutes'));
-app.use('/api/ai', require('./routes/aiRoutes'));
 app.use('/api/website', require('./routes/websiteRoutes'));
 app.use('/api/doubts', require('./routes/doubtRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
