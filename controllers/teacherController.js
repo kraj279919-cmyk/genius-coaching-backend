@@ -6,6 +6,13 @@ const Result = require('../models/Result');
 const Notice = require('../models/Notice');
 const StudyMaterial = require('../models/StudyMaterial');
 const catchAsync = require('../utils/catchAsync');
+const {
+  isValidPhone,
+  isValidEmailOptional,
+  normalizePhone,
+  normalizeEmail,
+  validateRequiredFields
+} = require('../utils/validators');
 
 /**
  * @desc    Create a new teacher profile
@@ -15,20 +22,34 @@ const catchAsync = require('../utils/catchAsync');
 const createTeacher = catchAsync(async (req, res) => {
   const { name, email, phone, password, teacherId, subject, qualification, address, experience, status, assignedClasses } = req.body;
 
+  const requiredError = validateRequiredFields(['name', 'phone', 'subject', 'password'], req.body);
+  if (requiredError) { res.status(400); throw new Error(requiredError); }
+
+  if (!isValidPhone(phone)) { res.status(400); throw new Error('Phone number must be 10 digits.'); }
+  if (!isValidEmailOptional(email)) { res.status(400); throw new Error('Invalid email format.'); }
+  if (status && !['active', 'inactive'].includes(status)) { res.status(400); throw new Error('Invalid status.'); }
+
+  const cleanEmail = normalizeEmail(email);
+  const cleanPhone = normalizePhone(phone);
+
+  if (cleanEmail !== '') {
+    const emailExists = await User.findOne({ email: cleanEmail });
+    if (emailExists) { res.status(400); throw new Error('This email is already registered.'); }
+  }
+  
+  const phoneExists = await User.findOne({ phone: cleanPhone });
+  if (phoneExists) { res.status(400); throw new Error('This phone number is already registered.'); }
+
   const existingTeacher = await Teacher.findOne({ teacherId });
   if (existingTeacher) {
     res.status(400);
     throw new Error('Teacher with this ID already exists');
   }
 
-  // Create User first
-  const cleanEmail = email ? email.trim().toLowerCase() : undefined;
-  const cleanPhone = phone ? phone.trim() : undefined;
-  
   const user = await User.create({
     name,
     email: cleanEmail === '' ? undefined : cleanEmail,
-    phone: cleanPhone === '' ? undefined : cleanPhone,
+    phone: cleanPhone,
     password,
     role: 'teacher',
     status: status === 'inactive' ? 'inactive' : 'active'
@@ -59,7 +80,10 @@ const createTeacher = catchAsync(async (req, res) => {
  * @access  Private
  */
 const getTeachers = catchAsync(async (req, res) => {
-  const teachers = await Teacher.find({});
+  const limit = parseInt(req.query.limit) || 1000;
+  const page = parseInt(req.query.page) || 1;
+  const skip = (page - 1) * limit;
+  const teachers = await Teacher.find({}).lean().sort({ createdAt: -1 }).skip(skip).limit(limit);
   res.json(teachers);
 });
 
@@ -88,14 +112,32 @@ const updateTeacher = catchAsync(async (req, res) => {
   const teacher = await Teacher.findById(req.params.id);
 
   if (teacher) {
-    teacher.name = req.body.name !== undefined ? req.body.name : teacher.name;
-    teacher.email = req.body.email !== undefined ? req.body.email : teacher.email;
-    teacher.subject = req.body.subject !== undefined ? req.body.subject : teacher.subject;
+    if (req.body.name !== undefined && req.body.name.trim() === '') { res.status(400); throw new Error("Teacher name is required."); }
+    if (req.body.phone !== undefined && !isValidPhone(req.body.phone)) { res.status(400); throw new Error("Phone number must be 10 digits."); }
+    if (req.body.email !== undefined && !isValidEmailOptional(req.body.email)) { res.status(400); throw new Error("Invalid email format."); }
+    if (req.body.subject !== undefined && req.body.subject.trim() === '') { res.status(400); throw new Error("Subject is required."); }
+    if (req.body.status !== undefined && !['active', 'inactive'].includes(req.body.status)) { res.status(400); throw new Error("Invalid status."); }
+
+    if (req.body.phone) {
+      const cleanPhone = normalizePhone(req.body.phone);
+      const phoneExists = await User.findOne({ phone: cleanPhone, _id: { $ne: teacher.userId } });
+      if (phoneExists) { res.status(400); throw new Error('This phone number is already registered.'); }
+    }
+    
+    if (req.body.email) {
+      const cleanEmail = normalizeEmail(req.body.email);
+      const emailExists = await User.findOne({ email: cleanEmail, _id: { $ne: teacher.userId } });
+      if (emailExists) { res.status(400); throw new Error('This email is already registered.'); }
+    }
+
+    teacher.name = req.body.name || teacher.name;
+    teacher.email = req.body.email ? normalizeEmail(req.body.email) : teacher.email;
+    teacher.subject = req.body.subject || teacher.subject;
     teacher.qualification = req.body.qualification !== undefined ? req.body.qualification : teacher.qualification;
-    teacher.phone = req.body.phone !== undefined ? req.body.phone : teacher.phone;
+    teacher.phone = req.body.phone ? normalizePhone(req.body.phone) : teacher.phone;
     teacher.address = req.body.address !== undefined ? req.body.address : teacher.address;
     teacher.experience = req.body.experience !== undefined ? req.body.experience : teacher.experience;
-    teacher.status = req.body.status !== undefined ? req.body.status : teacher.status;
+    if (req.body.status) teacher.status = req.body.status;
     teacher.assignedClasses = req.body.assignedClasses !== undefined ? req.body.assignedClasses : teacher.assignedClasses;
     
     if (req.body.profileImage) teacher.profileImage = req.body.profileImage;
@@ -154,11 +196,13 @@ const deleteTeacher = catchAsync(async (req, res) => {
 
   if (teacher) {
     // Check linked data
-    const linkedHomework = await Homework.countDocuments({ createdBy: teacher.userId });
-    const linkedAttendance = await Attendance.countDocuments({ markedBy: teacher.userId });
-    const linkedResults = await Result.countDocuments({ recordedBy: teacher.userId });
-    const linkedNotices = await Notice.countDocuments({ createdBy: teacher.userId });
-    const linkedMaterials = await StudyMaterial.countDocuments({ uploadedBy: teacher.userId });
+    const [linkedHomework, linkedAttendance, linkedResults, linkedNotices, linkedMaterials] = await Promise.all([
+      Homework.countDocuments({ createdBy: teacher.userId }),
+      Attendance.countDocuments({ markedBy: teacher.userId }),
+      Result.countDocuments({ recordedBy: teacher.userId }),
+      Notice.countDocuments({ createdBy: teacher.userId }),
+      StudyMaterial.countDocuments({ uploadedBy: teacher.userId })
+    ]);
     
     const totalLinked = linkedHomework + linkedAttendance + linkedResults + linkedNotices + linkedMaterials;
 

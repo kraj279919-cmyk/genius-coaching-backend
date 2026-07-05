@@ -18,7 +18,7 @@ router.route('/summary')
   .get(authorize('admin', 'director'), getFeeSummary);
 
 router.route('/student/:studentId')
-  .get(getFeesByStudentId);
+  .get(authorize('admin', 'director', 'student'), getFeesByStudentId);
 
 router.route('/')
   .get(authorize('admin', 'director'), getFeeRecords)

@@ -51,6 +51,8 @@ const noticeSchema = new mongoose.Schema(
   }
 );
 
+noticeSchema.index({ status: 1, targetAudience: 1 });
+
 const Notice = mongoose.model('Notice', noticeSchema);
 
 module.exports = Notice;

@@ -1,5 +1,8 @@
 const Gallery = require('../models/Gallery');
 const catchAsync = require('../utils/catchAsync');
+const {
+  validateRequiredFields
+} = require('../utils/validators');
 
 /**
  * @desc    Get all gallery images (Admin view)
@@ -11,8 +14,15 @@ const getGallery = catchAsync(async (req, res) => {
   if (req.query.category) filter.category = req.query.category;
   if (req.query.status) filter.status = req.query.status;
 
+  const limit = parseInt(req.query.limit) || 1000;
+  const page = parseInt(req.query.page) || 1;
+  const skip = (page - 1) * limit;
+
   const gallery = await Gallery.find(filter)
+    .lean()
     .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
     .populate('uploadedBy', 'name role');
 
   res.json(gallery);
@@ -27,8 +37,15 @@ const getPublicGallery = catchAsync(async (req, res) => {
   const filter = { status: 'active' };
   if (req.query.category) filter.category = req.query.category;
 
+  const limit = parseInt(req.query.limit) || 1000;
+  const page = parseInt(req.query.page) || 1;
+  const skip = (page - 1) * limit;
+
   const gallery = await Gallery.find(filter)
+    .lean()
     .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
     .select('-uploadedBy'); // Hide uploader info for public
 
   res.json(gallery);
@@ -63,9 +80,12 @@ const getGalleryById = catchAsync(async (req, res) => {
 const createGalleryImage = catchAsync(async (req, res) => {
   const { title, imageUrl, cloudinaryPublicId, category, description, status } = req.body;
 
-  if (!title) { res.status(400); throw new Error('Title required'); }
-  if (!imageUrl) { res.status(400); throw new Error('Image URL required'); }
+  const requiredError = validateRequiredFields(['title', 'imageUrl'], req.body);
+  if (requiredError) { res.status(400); throw new Error(requiredError); }
+
   if (!imageUrl.startsWith('http')) { res.status(400); throw new Error('Invalid Image URL'); }
+  if (category && !['campus', 'events', 'achievements', 'other'].includes(category)) { res.status(400); throw new Error('Invalid category.'); }
+  if (status && !['active', 'inactive'].includes(status)) { res.status(400); throw new Error('Invalid status.'); }
 
   const galleryItem = await Gallery.create({
     title,
@@ -92,11 +112,13 @@ const updateGalleryImage = catchAsync(async (req, res) => {
   if (galleryItem) {
     const { title, imageUrl, cloudinaryPublicId, category, description, status } = req.body;
     
+    if (req.body.title !== undefined && req.body.title.trim() === '') { res.status(400); throw new Error("Title is required."); }
+    if (req.body.imageUrl !== undefined && !req.body.imageUrl.startsWith('http')) { res.status(400); throw new Error('Invalid Image URL'); }
+    if (req.body.category !== undefined && !['campus', 'events', 'achievements', 'other'].includes(req.body.category)) { res.status(400); throw new Error('Invalid category.'); }
+    if (req.body.status !== undefined && !['active', 'inactive'].includes(req.body.status)) { res.status(400); throw new Error('Invalid status.'); }
+
     if (title) galleryItem.title = title;
-    if (imageUrl) {
-      if (!imageUrl.startsWith('http')) { res.status(400); throw new Error('Invalid Image URL'); }
-      galleryItem.imageUrl = imageUrl;
-    }
+    if (imageUrl) galleryItem.imageUrl = imageUrl;
     if (cloudinaryPublicId !== undefined) galleryItem.cloudinaryPublicId = cloudinaryPublicId;
     if (category) galleryItem.category = category;
     if (description !== undefined) galleryItem.description = description;

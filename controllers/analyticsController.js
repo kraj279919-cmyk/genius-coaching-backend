@@ -31,13 +31,13 @@ const getOverviewAnalytics = catchAsync(async (req, res) => {
     Homework.countDocuments({ status: 'active' }),
     StudyMaterial.countDocuments({ status: 'active' }),
     Gallery.countDocuments({ status: 'active' }),
-    Result.find().select('percentage')
+    Result.find().select('percentage').lean()
   ]);
 
   // Today's Attendance
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const attendanceToday = await Attendance.find({ date: { $gte: today } });
+  const attendanceToday = await Attendance.find({ date: { $gte: today } }).lean();
   const presentToday = attendanceToday.filter(a => a.status === 'present').length;
   const todayAttendancePct = attendanceToday.length ? Math.round((presentToday / attendanceToday.length) * 100) : 0;
 
@@ -45,7 +45,7 @@ const getOverviewAnalytics = catchAsync(async (req, res) => {
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   const feeRecords = await FeeRecord.find({ 
     month: { $gte: startOfMonth.toISOString() } 
-  });
+  }).lean();
   
   let paidFees = 0, pendingFees = 0;
   feeRecords.forEach(f => {
@@ -79,7 +79,7 @@ const getOverviewAnalytics = catchAsync(async (req, res) => {
  * @access  Private (Director)
  */
 const getStudentAnalytics = catchAsync(async (req, res) => {
-  const students = await Student.find();
+  const students = await Student.find().lean();
   
   const activeStudents = students.filter(s => s.status !== 'inactive' && s.status !== 'left').length;
   const inactiveStudents = students.length - activeStudents;
@@ -124,7 +124,7 @@ const getStudentAnalytics = catchAsync(async (req, res) => {
  * @access  Private (Director)
  */
 const getTeacherAnalytics = catchAsync(async (req, res) => {
-  const teachers = await Teacher.find();
+  const teachers = await Teacher.find().lean();
   const activeTeachers = teachers.filter(t => t.status !== 'inactive' && t.status !== 'left').length;
   
   const [hwCount, matCount] = await Promise.all([
@@ -149,7 +149,7 @@ const getTeacherAnalytics = catchAsync(async (req, res) => {
  * @access  Private (Director)
  */
 const getFeeAnalytics = catchAsync(async (req, res) => {
-  const records = await FeeRecord.find().populate('studentId', 'name class phone');
+  const records = await FeeRecord.find().lean().populate('studentId', 'name class phone');
   
   let paidFees = 0;
   let pendingFees = 0;
@@ -186,7 +186,7 @@ const getFeeAnalytics = catchAsync(async (req, res) => {
  * @access  Private (Director)
  */
 const getAttendanceAnalytics = catchAsync(async (req, res) => {
-  const att = await Attendance.find();
+  const att = await Attendance.find().lean();
   const present = att.filter(a => a.status === 'present').length;
   const overall = att.length ? Math.round((present / att.length) * 100) : 0;
   
@@ -205,7 +205,7 @@ const getAttendanceAnalytics = catchAsync(async (req, res) => {
  * @access  Private (Director)
  */
 const getResultAnalytics = catchAsync(async (req, res) => {
-  const results = await Result.find().populate('studentId', 'name class');
+  const results = await Result.find().lean().populate('studentId', 'name class');
   
   let totalPct = 0;
   let topper = null;

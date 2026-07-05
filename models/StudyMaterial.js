@@ -46,6 +46,8 @@ const studyMaterialSchema = new mongoose.Schema(
   }
 );
 
+studyMaterialSchema.index({ class: 1, status: 1 });
+
 const StudyMaterial = mongoose.model('StudyMaterial', studyMaterialSchema);
 
 module.exports = StudyMaterial;

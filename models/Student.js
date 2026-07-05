@@ -71,6 +71,10 @@ const studentSchema = new mongoose.Schema(
   }
 );
 
+// Indexes for performance
+studentSchema.index({ userId: 1 });
+studentSchema.index({ class: 1, status: 1 });
+
 const Student = mongoose.model('Student', studentSchema);
 
 module.exports = Student;

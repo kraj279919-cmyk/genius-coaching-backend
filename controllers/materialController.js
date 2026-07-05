@@ -1,6 +1,10 @@
 const StudyMaterial = require('../models/StudyMaterial');
 const Student = require('../models/Student');
 const catchAsync = require('../utils/catchAsync');
+const { normalizeClass } = require('../utils/classNormalizer');
+const {
+  validateRequiredFields
+} = require('../utils/validators');
 
 /**
  * @desc    Upload new study material
@@ -10,17 +14,23 @@ const catchAsync = require('../utils/catchAsync');
 const createMaterial = catchAsync(async (req, res) => {
   const { title, description, class: targetClass, subject, type, fileUrl, cloudinaryPublicId, status } = req.body;
 
-  if (!title) { res.status(400); throw new Error('Title required'); }
-  if (!targetClass) { res.status(400); throw new Error('Class required'); }
-  if (!subject) { res.status(400); throw new Error('Subject required'); }
-  if (!fileUrl) { res.status(400); throw new Error('File URL required'); }
-  if (!fileUrl.startsWith('http')) { res.status(400); throw new Error('Invalid URL'); }
+  const requiredError = validateRequiredFields(['title', 'class', 'subject'], req.body);
+  if (requiredError) { res.status(400); throw new Error(requiredError); }
+
+  const validTypes = ['pdf', 'video', 'link', 'note', 'image'];
+  if (type && !validTypes.includes(type)) { res.status(400); throw new Error('Invalid material type.'); }
+
+  if (fileUrl && !fileUrl.startsWith('http')) { res.status(400); throw new Error('Invalid URL'); }
+  
+  if (status && !['active', 'inactive'].includes(status)) { res.status(400); throw new Error('Invalid status.'); }
+
+  const normalizedClass = normalizeClass(targetClass);
 
   const material = await StudyMaterial.create({
     title,
     description: description || '',
     subject,
-    class: targetClass,
+    class: normalizedClass,
     type: type || 'note',
     fileUrl,
     cloudinaryPublicId,
@@ -43,17 +53,24 @@ const getMaterials = catchAsync(async (req, res) => {
   if (req.user.role === 'student') {
     const student = await Student.findOne({ userId: req.user._id });
     if (!student) { res.status(404); throw new Error('Student profile not found'); }
-    filter.class = student.class;
+    filter.class = normalizeClass(student.class);
     filter.status = 'active'; // Students see only active materials
   } else {
-    if (req.query.class) filter.class = req.query.class;
+    if (req.query.class) filter.class = normalizeClass(req.query.class);
     if (req.query.subject) filter.subject = req.query.subject;
     if (req.query.type) filter.type = req.query.type;
     if (req.query.status) filter.status = req.query.status;
   }
 
+  const limit = parseInt(req.query.limit) || 1000;
+  const page = parseInt(req.query.page) || 1;
+  const skip = (page - 1) * limit;
+
   const materials = await StudyMaterial.find(filter)
+    .lean()
     .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
     .populate('uploadedBy', 'name role');
 
   res.json(materials);
@@ -65,16 +82,25 @@ const getMaterials = catchAsync(async (req, res) => {
  * @access  Private
  */
 const getMaterialsByClass = catchAsync(async (req, res) => {
+  const requestedClass = normalizeClass(req.params.className);
+  
   if (req.user.role === 'student') {
-    const student = await Student.findOne({ userId: req.user._id });
-    if (!student || student.class !== req.params.className) {
+    const student = await Student.findOne({ userId: req.user._id }).lean();
+    if (!student || normalizeClass(student.class) !== requestedClass) {
       res.status(403);
       throw new Error('Unauthorized access to this class materials');
     }
   }
 
-  const materials = await StudyMaterial.find({ class: req.params.className })
+  const limit = parseInt(req.query.limit) || 1000;
+  const page = parseInt(req.query.page) || 1;
+  const skip = (page - 1) * limit;
+
+  const materials = await StudyMaterial.find({ class: requestedClass })
+    .lean()
     .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
     .populate('uploadedBy', 'name role');
 
   res.json(materials);
@@ -92,7 +118,7 @@ const getMaterialById = catchAsync(async (req, res) => {
   if (material) {
     if (req.user.role === 'student') {
       const student = await Student.findOne({ userId: req.user._id });
-      if (!student || material.class !== student.class) {
+      if (!student || normalizeClass(material.class) !== normalizeClass(student.class)) {
         res.status(403);
         throw new Error('Unauthorized access');
       }
@@ -115,10 +141,14 @@ const updateMaterial = catchAsync(async (req, res) => {
   if (material) {
     const { title, description, class: targetClass, subject, type, fileUrl, cloudinaryPublicId, status } = req.body;
     
+    if (req.body.title !== undefined && req.body.title.trim() === '') { res.status(400); throw new Error("Title is required."); }
+    if (req.body.type !== undefined && !['pdf', 'video', 'link', 'note', 'image'].includes(req.body.type)) { res.status(400); throw new Error('Invalid material type.'); }
+    if (req.body.status !== undefined && !['active', 'inactive'].includes(req.body.status)) { res.status(400); throw new Error('Invalid status.'); }
+
     if (title) material.title = title;
     if (description !== undefined) material.description = description;
     if (subject) material.subject = subject;
-    if (targetClass) material.class = targetClass;
+    if (targetClass) material.class = normalizeClass(targetClass);
     if (type) material.type = type;
     if (fileUrl) {
       if (!fileUrl.startsWith('http')) { res.status(400); throw new Error('Invalid URL'); }

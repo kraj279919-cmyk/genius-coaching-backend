@@ -2,6 +2,7 @@ const { GoogleGenAI } = require('@google/genai');
 const catchAsync = require('../utils/catchAsync');
 const ConfigService = require('../utils/configService');
 const logAction = require('../utils/auditLogger');
+const { sanitizeText } = require('../utils/validators');
 const JobQueue = require('../models/JobQueue');
 
 // Initialize Gemini Client
@@ -35,7 +36,8 @@ const logAiUsage = async (type, payloadSummary) => {
  */
 const generateNotice = catchAsync(async (req, res) => {
   await checkAiEnabled();
-  const { topic } = req.body;
+  let { topic } = req.body;
+  if (topic) topic = sanitizeText(topic, 500);
   if (!topic) {
     res.status(400);
     throw new Error('Please provide a topic for the notice.');
@@ -159,7 +161,8 @@ const analyzeAttendance = catchAsync(async (req, res) => {
  */
 const chatAssistant = catchAsync(async (req, res) => {
   await checkAiEnabled();
-  const { message } = req.body;
+  let { message } = req.body;
+  if (message) message = sanitizeText(message, 1000);
   const role = req.user.role;
 
   let systemInstruction = "You are a helpful assistant.";

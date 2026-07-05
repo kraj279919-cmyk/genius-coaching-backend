@@ -19,7 +19,7 @@ router.route('/public')
 router.use(protect);
 
 router.route('/')
-  .get(authorize('admin', 'director'), getGallery)
+  .get(authorize('admin', 'director', 'teacher', 'student'), getGallery)
   .post(authorize('admin', 'director'), createGalleryImage);
 
 router.route('/:id')

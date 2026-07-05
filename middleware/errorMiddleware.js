@@ -43,6 +43,12 @@ const errorHandler = (err, req, res, next) => {
     statusCode = 400;
   }
 
+  // 4. Multer Error
+  if (err.name === 'MulterError' || (err.message && err.message.includes('Invalid file type'))) {
+    message = err.message;
+    statusCode = 400;
+  }
+
   // Phase 13.8 - Log error to database
   try {
     const ErrorLog = require('../models/ErrorLog');
@@ -62,8 +68,6 @@ const errorHandler = (err, req, res, next) => {
   res.status(statusCode).json({
     success: false,
     message,
-    // Only show the stack trace if we are in development mode
-    stack: process.env.NODE_ENV === 'production' ? null : err.stack,
   });
 };
 

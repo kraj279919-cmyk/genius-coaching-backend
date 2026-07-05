@@ -50,6 +50,9 @@ const resultSchema = new mongoose.Schema(
   }
 );
 
+resultSchema.index({ studentId: 1 });
+resultSchema.index({ class: 1 });
+
 const Result = mongoose.model('Result', resultSchema);
 
 module.exports = Result;

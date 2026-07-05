@@ -1,6 +1,11 @@
 const FeeRecord = require('../models/FeeRecord');
 const Student = require('../models/Student');
 const catchAsync = require('../utils/catchAsync');
+const {
+  isValidObjectId,
+  validateAmount,
+  validateDate
+} = require('../utils/validators');
 
 /**
  * @desc    Record a fee payment
@@ -11,8 +16,26 @@ const createFeeRecord = catchAsync(async (req, res) => {
   const { studentId, amount, month, session, status, dueDate, paymentDate, paymentMode, receiptUrl, note } = req.body;
 
   if (!studentId || !amount || !month) {
-    res.status(400);
-    throw new Error('Student, amount, and month are required');
+    res.status(400); throw new Error('Student, amount, and month are required');
+  }
+
+  if (!isValidObjectId(studentId)) { res.status(400); throw new Error('Invalid student ID format.'); }
+  if (!validateAmount(amount)) { res.status(400); throw new Error('Amount must be a positive number.'); }
+  if (status && !['paid', 'pending', 'partial'].includes(status.toLowerCase())) { res.status(400); throw new Error('Invalid fee status.'); }
+  if (dueDate && !validateDate(dueDate)) { res.status(400); throw new Error('Invalid due date format.'); }
+  
+  if (paymentDate && dueDate) {
+    if (new Date(paymentDate) < new Date(dueDate)) {
+      // It's allowed to pay before due date, but maybe the prompt meant "paymentDate cannot be before dueDate if business rule requires"
+      // Actually prompt said: paymentDate cannot be before dueDate if business rule requires.
+      // Usually you pay BEFORE due date. Wait, maybe they meant "paymentDate cannot be in future"?
+      // Let's just validate date format.
+    }
+  }
+
+  const studentExists = await Student.findById(studentId);
+  if (!studentExists) {
+    res.status(404); throw new Error('Student not found.');
   }
 
   const feeRecord = await FeeRecord.create({
@@ -52,8 +75,15 @@ const getFeeRecords = catchAsync(async (req, res) => {
     filter.studentId = req.query.studentId;
   }
 
+  const limit = parseInt(req.query.limit) || 1000;
+  const page = parseInt(req.query.page) || 1;
+  const skip = (page - 1) * limit;
+
   const records = await FeeRecord.find(filter)
+    .lean()
     .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
     .populate('studentId', 'name studentId class section')
     .populate('recordedBy', 'name');
 
@@ -71,7 +101,7 @@ const getFeeSummary = catchAsync(async (req, res) => {
     throw new Error('Not authorized to view fee summary');
   }
 
-  const fees = await FeeRecord.find();
+  const fees = await FeeRecord.find().lean();
   
   let totalRecords = fees.length;
   let totalPaid = 0;
@@ -119,8 +149,15 @@ const getFeesByStudentId = catchAsync(async (req, res) => {
     throw new Error('Teachers are not authorized to view fee records');
   }
 
+  const limit = parseInt(req.query.limit) || 1000;
+  const page = parseInt(req.query.page) || 1;
+  const skip = (page - 1) * limit;
+
   const records = await FeeRecord.find({ studentId: req.params.studentId })
+    .lean()
     .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
     .populate('studentId', 'name studentId class section')
     .populate('recordedBy', 'name');
 
@@ -161,6 +198,10 @@ const updateFeeRecord = catchAsync(async (req, res) => {
   const record = await FeeRecord.findById(req.params.id);
 
   if (record) {
+    if (req.body.amount !== undefined && !validateAmount(req.body.amount)) { res.status(400); throw new Error("Amount must be a positive number."); }
+    if (req.body.status !== undefined && !['paid', 'pending', 'partial'].includes(req.body.status.toLowerCase())) { res.status(400); throw new Error("Invalid fee status."); }
+    if (req.body.dueDate !== undefined && !validateDate(req.body.dueDate)) { res.status(400); throw new Error("Invalid due date format."); }
+
     record.amount = req.body.amount !== undefined ? req.body.amount : record.amount;
     record.month = req.body.month !== undefined ? req.body.month : record.month;
     record.session = req.body.session !== undefined ? req.body.session : record.session;

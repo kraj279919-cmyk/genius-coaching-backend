@@ -46,6 +46,8 @@ const homeworkSchema = new mongoose.Schema(
   }
 );
 
+homeworkSchema.index({ class: 1, status: 1 });
+
 const Homework = mongoose.model('Homework', homeworkSchema);
 
 module.exports = Homework;

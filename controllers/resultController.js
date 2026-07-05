@@ -1,6 +1,12 @@
 const Result = require('../models/Result');
 const Student = require('../models/Student');
 const catchAsync = require('../utils/catchAsync');
+const { normalizeClass } = require('../utils/classNormalizer');
+const {
+  isValidObjectId,
+  validateMarks,
+  validateRequiredFields
+} = require('../utils/validators');
 
 const calculateGrade = (percentage) => {
   if (percentage >= 90) return 'A+';
@@ -19,10 +25,17 @@ const calculateGrade = (percentage) => {
 const createResult = catchAsync(async (req, res) => {
   const { studentId, examName, subject, class: studentClass, marksObtained, totalMarks, remarks, reportUrl } = req.body;
 
-  if (!studentId) { res.status(400); throw new Error('Please select a student'); }
-  if (marksObtained === undefined || marksObtained === null) { res.status(400); throw new Error('Marks required'); }
-  if (totalMarks === undefined || totalMarks === null) { res.status(400); throw new Error('Total marks required'); }
-  if (Number(marksObtained) > Number(totalMarks)) { res.status(400); throw new Error('Marks cannot exceed total marks'); }
+  const requiredError = validateRequiredFields(['studentId', 'examName', 'subject', 'marksObtained', 'totalMarks'], req.body);
+  if (requiredError) { res.status(400); throw new Error(requiredError); }
+
+  if (!isValidObjectId(studentId)) { res.status(400); throw new Error('Invalid student ID format.'); }
+  
+  if (!validateMarks(marksObtained, totalMarks)) {
+    res.status(400); throw new Error('Invalid marks: Marks must be positive and cannot exceed total marks.');
+  }
+
+  const studentExists = await Student.findById(studentId);
+  if (!studentExists) { res.status(404); throw new Error('Student not found.'); }
 
   const percentage = Math.round((Number(marksObtained) / Number(totalMarks)) * 100);
   const grade = calculateGrade(percentage);
@@ -31,7 +44,7 @@ const createResult = catchAsync(async (req, res) => {
     studentId,
     examName,
     subject,
-    class: studentClass,
+    class: normalizeClass(studentClass),
     marksObtained: Number(marksObtained),
     totalMarks: Number(totalMarks),
     percentage,
@@ -62,13 +75,20 @@ const getResults = catchAsync(async (req, res) => {
     filter.studentId = student._id;
   } else {
     if (req.query.studentId) filter.studentId = req.query.studentId;
-    if (req.query.class) filter.class = req.query.class;
+    if (req.query.class) filter.class = normalizeClass(req.query.class);
     if (req.query.examName) filter.examName = req.query.examName;
     if (req.query.subject) filter.subject = req.query.subject;
   }
 
+  const limit = parseInt(req.query.limit) || 1000;
+  const page = parseInt(req.query.page) || 1;
+  const skip = (page - 1) * limit;
+
   const results = await Result.find(filter)
+    .lean()
     .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
     .populate('studentId', 'name studentId class')
     .populate('uploadedBy', 'name role');
 
@@ -82,15 +102,22 @@ const getResults = catchAsync(async (req, res) => {
  */
 const getStudentResults = catchAsync(async (req, res) => {
   if (req.user.role === 'student') {
-    const student = await Student.findOne({ userId: req.user._id });
+    const student = await Student.findOne({ userId: req.user._id }).lean();
     if (!student || student._id.toString() !== req.params.studentId) {
       res.status(403);
       throw new Error('Unauthorized access');
     }
   }
 
+  const limit = parseInt(req.query.limit) || 1000;
+  const page = parseInt(req.query.page) || 1;
+  const skip = (page - 1) * limit;
+
   const results = await Result.find({ studentId: req.params.studentId })
+    .lean()
     .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
     .populate('studentId', 'name studentId class')
     .populate('uploadedBy', 'name role');
 
@@ -129,11 +156,14 @@ const getResultById = catchAsync(async (req, res) => {
  */
 const getStudentProgress = catchAsync(async (req, res) => {
   if (req.user.role === 'student') {
-    res.status(403);
-    throw new Error('Unauthorized access');
+    const student = await Student.findOne({ userId: req.user._id }).lean();
+    if (!student || student._id.toString() !== req.params.studentId) {
+      res.status(403);
+      throw new Error('Unauthorized access');
+    }
   }
 
-  const results = await Result.find({ studentId: req.params.studentId }).sort({ createdAt: 1 });
+  const results = await Result.find({ studentId: req.params.studentId }).lean().sort({ createdAt: 1 });
   
   if (results.length === 0) {
     return res.json({ message: 'Not enough result data yet.' });
@@ -184,7 +214,7 @@ const getResultSummary = catchAsync(async (req, res) => {
     throw new Error('Unauthorized access');
   }
 
-  const results = await Result.find().sort({ createdAt: -1 }).limit(50);
+  const results = await Result.find().lean().sort({ createdAt: -1 }).limit(50);
   const total = await Result.countDocuments();
   
   let latestAvg = 0;
@@ -213,9 +243,8 @@ const updateResult = catchAsync(async (req, res) => {
     if (marksObtained !== undefined) result.marksObtained = Number(marksObtained);
     if (totalMarks !== undefined) result.totalMarks = Number(totalMarks);
     
-    if (result.marksObtained > result.totalMarks) {
-      res.status(400);
-      throw new Error('Marks cannot exceed total marks');
+    if (!validateMarks(result.marksObtained, result.totalMarks)) {
+      res.status(400); throw new Error('Invalid marks: Marks must be positive and cannot exceed total marks.');
     }
     
     result.percentage = Math.round((result.marksObtained / result.totalMarks) * 100);

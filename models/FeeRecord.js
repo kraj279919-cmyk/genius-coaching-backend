@@ -50,6 +50,9 @@ const feeRecordSchema = new mongoose.Schema(
   }
 );
 
+feeRecordSchema.index({ studentId: 1 });
+feeRecordSchema.index({ status: 1 });
+
 const FeeRecord = mongoose.model('FeeRecord', feeRecordSchema);
 
 module.exports = FeeRecord;
