@@ -80,7 +80,11 @@ const getStudents = catchAsync(async (req, res) => {
   const limit = parseInt(req.query.limit) || 1000;
   const page = parseInt(req.query.page) || 1;
   const skip = (page - 1) * limit;
-  const students = await Student.find({}).lean().sort({ createdAt: -1 }).skip(skip).limit(limit);
+  const filter = {};
+  if (req.query.class) {
+    filter.class = normalizeClassName(req.query.class);
+  }
+  const students = await Student.find(filter).lean().sort({ createdAt: -1 }).skip(skip).limit(limit);
   res.json(students);
 });
 

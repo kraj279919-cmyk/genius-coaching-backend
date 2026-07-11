@@ -88,7 +88,7 @@ module.exports = {
   isValidEmailOptional,
   normalizePhone,
   normalizeEmail,
-  normalizeClassName,
+  normalizeClassName: normalizeClass,
   validateRequiredFields,
   validateAmount,
   validateMarks,
