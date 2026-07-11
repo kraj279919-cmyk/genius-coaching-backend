@@ -127,11 +127,26 @@ const updateUserProfile = catchAsync(async (req, res) => {
   if (user) {
     user.name = req.body.name || user.name;
     user.email = req.body.email || user.email;
-    if (req.body.profileImage) {
-      user.profileImage = req.body.profileImage;
+    
+    // Support both profileImage and profileImageUrl keys
+    const newImage = req.body.profileImage || req.body.profileImageUrl;
+    if (newImage) {
+      user.profileImage = newImage;
     }
 
     const updatedUser = await user.save();
+
+    // Synchronize to Student or Teacher document if they exist
+    if (newImage) {
+      if (user.role === 'student') {
+        const Student = require('../models/Student');
+        await Student.findOneAndUpdate({ userId: user._id }, { profileImage: newImage });
+      } else if (user.role === 'teacher') {
+        const Teacher = require('../models/Teacher');
+        await Teacher.findOneAndUpdate({ userId: user._id }, { profileImage: newImage });
+      }
+    }
+
     res.json({
       _id: updatedUser._id,
       name: updatedUser.name,
