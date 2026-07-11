@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const { protect } = require('../middleware/authMiddleware');
-const { uploadImage } = require('../controllers/uploadController');
+const { uploadImage, deleteFile } = require('../controllers/uploadController');
 
 // Multer memory storage
 const storage = multer.memoryStorage();
@@ -29,5 +29,8 @@ const upload = multer({
 
 // Single file upload route
 router.post('/', protect, upload.single('file'), uploadImage);
+
+// Delete file route
+router.delete('/', protect, deleteFile);
 
 module.exports = router;
