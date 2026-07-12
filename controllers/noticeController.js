@@ -1,6 +1,6 @@
 const Notice = require('../models/Notice');
 const catchAsync = require('../utils/catchAsync');
-const { normalizeClass } = require('../utils/classNormalizer');
+const { normalizeClassName, getAliasesForClass } = require('../utils/classNormalizer');
 const {
   validateRequiredFields,
   validateDate
@@ -49,7 +49,7 @@ const createNotice = catchAsync(async (req, res) => {
     image,
     category: category || 'general',
     targetAudience: targetAudience || 'all',
-    targetClass: targetAudience === 'class' ? normalizeClass(targetClass) : undefined,
+    targetClass: targetAudience === 'class' ? normalizeClassName(targetClass) : undefined,
     priority: priority || 'normal',
     status: status || 'published',
     expiryDate,
@@ -81,14 +81,14 @@ const getNotices = catchAsync(async (req, res) => {
   } else if (req.user.role === 'student') {
     // Students see published active notices for 'all', 'students', or their specific class
     const student = await require('../models/Student').findOne({ userId: req.user._id });
-    const sClass = student ? normalizeClass(student.class) : 'UNKNOWN';
+    const sClass = student ? normalizeClassName(student.class) : 'UNKNOWN';
     
     query = {
       status: 'published',
       $or: [{ expiryDate: { $gt: currentDate } }, { expiryDate: null }],
       $or: [
         { targetAudience: { $in: ['all', 'students'] } },
-        { targetAudience: 'class', targetClass: sClass }
+        { targetAudience: 'class', targetClass: { $in: getAliasesForClass(sClass) } }
       ]
     };
   }
@@ -178,7 +178,7 @@ const updateNotice = catchAsync(async (req, res) => {
     notice.description = req.body.description !== undefined ? req.body.description : notice.description;
     notice.category = req.body.category !== undefined ? req.body.category : notice.category;
     notice.targetAudience = req.body.targetAudience !== undefined ? req.body.targetAudience : notice.targetAudience;
-    notice.targetClass = notice.targetAudience === 'class' ? (req.body.targetClass !== undefined ? normalizeClass(req.body.targetClass) : notice.targetClass) : undefined;
+    notice.targetClass = notice.targetAudience === 'class' ? (req.body.targetClass !== undefined ? normalizeClassName(req.body.targetClass) : notice.targetClass) : undefined;
     notice.priority = req.body.priority !== undefined ? req.body.priority : notice.priority;
     notice.status = req.body.status !== undefined ? req.body.status : notice.status;
     notice.expiryDate = req.body.expiryDate !== undefined ? req.body.expiryDate : notice.expiryDate;

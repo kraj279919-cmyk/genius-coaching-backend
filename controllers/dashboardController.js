@@ -5,7 +5,7 @@ const Notice = require('../models/Notice');
 const FeeRecord = require('../models/FeeRecord');
 const Enquiry = require('../models/Enquiry');
 const Attendance = require('../models/Attendance');
-const { normalizeClass } = require('../utils/classNormalizer');
+const { normalizeClassName, getAliasesForClass } = require('../utils/classNormalizer');
 
 const getAdminDashboard = catchAsync(async (req, res) => {
   const Result = require('../models/Result');
@@ -143,7 +143,7 @@ const getStudentDashboard = catchAsync(async (req, res) => {
   }
 
   const name = studentDoc.name;
-  const sClass = normalizeClass(studentDoc.class);
+  const sClass = normalizeClassName(studentDoc.class);
   const roll = studentDoc.studentId;
 
   const Homework = require('../models/Homework');
@@ -164,11 +164,11 @@ const getStudentDashboard = catchAsync(async (req, res) => {
       status: 'published', 
       $or: [
         { targetAudience: { $in: ['all', 'students'] } },
-        { targetAudience: 'class', targetClass: sClass }
+        { targetAudience: 'class', targetClass: { $in: getAliasesForClass(sClass) } }
       ]
     }),
-    Homework.countDocuments({ class: sClass, status: 'active' }),
-    StudyMaterial.countDocuments({ class: sClass, status: 'active' }),
+    Homework.countDocuments({ class: { $in: getAliasesForClass(sClass) }, status: 'active' }),
+    StudyMaterial.countDocuments({ class: { $in: getAliasesForClass(sClass) }, status: 'active' }),
     Gallery.countDocuments({ status: 'active' }),
     Result.findOne({ studentId }).lean().sort({ createdAt: -1 }),
     Attendance.find({ studentId }).lean(),

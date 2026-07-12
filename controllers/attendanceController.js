@@ -1,7 +1,7 @@
 const Attendance = require('../models/Attendance');
 const Student = require('../models/Student');
 const catchAsync = require('../utils/catchAsync');
-const { normalizeClass } = require('../utils/classNormalizer');
+const { normalizeClassName, getAliasesForClass } = require('../utils/classNormalizer');
 const {
   isValidObjectId,
   validateDate
@@ -42,7 +42,7 @@ const createAttendance = catchAsync(async (req, res) => {
     throw new Error('Attendance already marked for this date');
   }
 
-  const normalizedClass = normalizeClass(studentClass);
+  const normalizedClass = normalizeClassName(studentClass);
 
   const attendance = await Attendance.create({
     studentId,
@@ -74,7 +74,13 @@ const getAttendance = catchAsync(async (req, res) => {
     }
     filter.studentId = student._id;
   } else {
-    if (req.query.class) filter.class = normalizeClass(req.query.class);
+    if (req.query.class) {
+      if (typeof req.query.class === 'string') {
+        filter.class = { $in: getAliasesForClass(req.query.class) };
+      } else if (Array.isArray(req.query.class)) {
+        filter.class = { $in: req.query.class.flatMap(c => getAliasesForClass(c)) };
+      }
+    }
     if (req.query.date) {
       const startOfDay = new Date(req.query.date);
       startOfDay.setHours(0, 0, 0, 0);
@@ -139,7 +145,7 @@ const getAttendanceByClass = catchAsync(async (req, res) => {
     throw new Error('Students cannot view class attendance');
   }
 
-  const filter = { class: normalizeClass(req.params.className) };
+  const filter = { class: { $in: getAliasesForClass(req.params.className) } };
   if (req.query.date) {
     const startOfDay = new Date(req.query.date);
     startOfDay.setHours(0, 0, 0, 0);

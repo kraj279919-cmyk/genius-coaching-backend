@@ -13,6 +13,7 @@ const {
   normalizeEmail,
   validateRequiredFields
 } = require('../utils/validators');
+const { normalizeClassName } = require('../utils/classNormalizer');
 
 /**
  * @desc    Create a new teacher profile
@@ -66,7 +67,7 @@ const createTeacher = catchAsync(async (req, res) => {
     address,
     experience,
     status: status || 'active',
-    assignedClasses: assignedClasses || [],
+    assignedClasses: (assignedClasses || []).map(c => normalizeClassName(c)).filter(Boolean),
     profileImage: req.body.profileImage || 'https://icon-library.com/images/anonymous-avatar-icon/anonymous-avatar-icon-25.jpg',
     cloudinaryPublicId: req.body.cloudinaryPublicId
   });
@@ -138,7 +139,7 @@ const updateTeacher = catchAsync(async (req, res) => {
     teacher.address = req.body.address !== undefined ? req.body.address : teacher.address;
     teacher.experience = req.body.experience !== undefined ? req.body.experience : teacher.experience;
     if (req.body.status) teacher.status = req.body.status;
-    teacher.assignedClasses = req.body.assignedClasses !== undefined ? req.body.assignedClasses : teacher.assignedClasses;
+    teacher.assignedClasses = req.body.assignedClasses !== undefined ? req.body.assignedClasses.map(c => normalizeClassName(c)).filter(Boolean) : teacher.assignedClasses;
     
     if (req.body.profileImage) teacher.profileImage = req.body.profileImage;
     if (req.body.cloudinaryPublicId) teacher.cloudinaryPublicId = req.body.cloudinaryPublicId;

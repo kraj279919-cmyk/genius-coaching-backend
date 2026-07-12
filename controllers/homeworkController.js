@@ -1,7 +1,7 @@
 const Homework = require('../models/Homework');
 const Student = require('../models/Student');
 const catchAsync = require('../utils/catchAsync');
-const { normalizeClass } = require('../utils/classNormalizer');
+const { normalizeClassName, getAliasesForClass } = require('../utils/classNormalizer');
 const {
   validateRequiredFields,
   validateDate
@@ -22,7 +22,7 @@ const createHomework = catchAsync(async (req, res) => {
   if (attachmentUrl && !attachmentUrl.startsWith('http')) { res.status(400); throw new Error('Invalid attachment URL.'); }
   if (status && !['active', 'completed', 'expired'].includes(status)) { res.status(400); throw new Error('Invalid status.'); }
 
-  const normalizedClass = normalizeClass(targetClass);
+  const normalizedClass = normalizeClassName(targetClass);
 
   const existing = await Homework.findOne({ title, class: normalizedClass, dueDate });
   if (existing) {
@@ -56,10 +56,16 @@ const getHomework = catchAsync(async (req, res) => {
   if (req.user.role === 'student') {
     const student = await Student.findOne({ userId: req.user._id });
     if (!student) { res.status(404); throw new Error('Student profile not found'); }
-    filter.class = normalizeClass(student.class);
+    filter.class = { $in: getAliasesForClass(student.class) };
     filter.status = 'active'; // Students see active homework by default unless specified
   } else {
-    if (req.query.class) filter.class = normalizeClass(req.query.class);
+    if (req.query.class) {
+      if (typeof req.query.class === 'string') {
+        filter.class = { $in: getAliasesForClass(req.query.class) };
+      } else if (Array.isArray(req.query.class)) {
+        filter.class = { $in: req.query.class.flatMap(c => getAliasesForClass(c)) };
+      }
+    }
     if (req.query.subject) filter.subject = req.query.subject;
     if (req.query.status) filter.status = req.query.status;
   }
@@ -84,11 +90,11 @@ const getHomework = catchAsync(async (req, res) => {
  * @access  Private
  */
 const getHomeworkByClass = catchAsync(async (req, res) => {
-  const requestedClass = normalizeClass(req.params.className);
+  const requestedClass = normalizeClassName(req.params.className);
 
   if (req.user.role === 'student') {
     const student = await Student.findOne({ userId: req.user._id }).lean();
-    if (!student || normalizeClass(student.class) !== requestedClass) {
+    if (!student || normalizeClassName(student.class) !== requestedClass) {
       res.status(403);
       throw new Error('Unauthorized access to this class homework');
     }
@@ -98,7 +104,7 @@ const getHomeworkByClass = catchAsync(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const skip = (page - 1) * limit;
 
-  const homeworkList = await Homework.find({ class: requestedClass })
+  const homeworkList = await Homework.find({ class: { $in: getAliasesForClass(requestedClass) } })
     .lean()
     .sort({ createdAt: -1 })
     .skip(skip)
@@ -151,7 +157,7 @@ const updateHomework = catchAsync(async (req, res) => {
     if (title) homework.title = title;
     if (description !== undefined) homework.description = description;
     if (subject) homework.subject = subject;
-    if (targetClass) homework.class = normalizeClass(targetClass);
+    if (targetClass) homework.class = normalizeClassName(targetClass);
     if (dueDate) homework.dueDate = dueDate;
     if (attachmentUrl !== undefined) homework.attachmentUrl = attachmentUrl;
     if (attachmentType) homework.attachmentType = attachmentType;

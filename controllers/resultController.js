@@ -1,7 +1,7 @@
 const Result = require('../models/Result');
 const Student = require('../models/Student');
 const catchAsync = require('../utils/catchAsync');
-const { normalizeClass } = require('../utils/classNormalizer');
+const { normalizeClassName, getAliasesForClass } = require('../utils/classNormalizer');
 const {
   isValidObjectId,
   validateMarks,
@@ -44,7 +44,7 @@ const createResult = catchAsync(async (req, res) => {
     studentId,
     examName,
     subject,
-    class: normalizeClass(studentClass),
+    class: normalizeClassName(studentClass),
     marksObtained: Number(marksObtained),
     totalMarks: Number(totalMarks),
     percentage,
@@ -75,7 +75,13 @@ const getResults = catchAsync(async (req, res) => {
     filter.studentId = student._id;
   } else {
     if (req.query.studentId) filter.studentId = req.query.studentId;
-    if (req.query.class) filter.class = normalizeClass(req.query.class);
+    if (req.query.class) {
+      if (typeof req.query.class === 'string') {
+        filter.class = { $in: getAliasesForClass(req.query.class) };
+      } else if (Array.isArray(req.query.class)) {
+        filter.class = { $in: req.query.class.flatMap(c => getAliasesForClass(c)) };
+      }
+    }
     if (req.query.examName) filter.examName = req.query.examName;
     if (req.query.subject) filter.subject = req.query.subject;
   }

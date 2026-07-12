@@ -71,6 +71,8 @@ const createStudent = catchAsync(async (req, res) => {
   res.status(201).json(student);
 });
 
+const { getAliasesForClass } = require('../utils/classNormalizer');
+
 /**
  * @desc    Get all students
  * @route   GET /api/students
@@ -82,7 +84,11 @@ const getStudents = catchAsync(async (req, res) => {
   const skip = (page - 1) * limit;
   const filter = {};
   if (req.query.class) {
-    filter.class = normalizeClassName(req.query.class);
+    if (typeof req.query.class === 'string') {
+      filter.class = { $in: getAliasesForClass(req.query.class) };
+    } else if (Array.isArray(req.query.class)) {
+      filter.class = { $in: req.query.class.flatMap(c => getAliasesForClass(c)) };
+    }
   }
   const students = await Student.find(filter).lean().sort({ createdAt: -1 }).skip(skip).limit(limit);
   res.json(students);

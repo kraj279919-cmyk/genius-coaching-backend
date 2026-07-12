@@ -1,7 +1,7 @@
 const StudyMaterial = require('../models/StudyMaterial');
 const Student = require('../models/Student');
 const catchAsync = require('../utils/catchAsync');
-const { normalizeClass } = require('../utils/classNormalizer');
+const { normalizeClassName, getAliasesForClass } = require('../utils/classNormalizer');
 const {
   validateRequiredFields
 } = require('../utils/validators');
@@ -24,7 +24,7 @@ const createMaterial = catchAsync(async (req, res) => {
   
   if (status && !['active', 'inactive'].includes(status)) { res.status(400); throw new Error('Invalid status.'); }
 
-  const normalizedClass = normalizeClass(targetClass);
+  const normalizedClass = normalizeClassName(targetClass);
 
   const material = await StudyMaterial.create({
     title,
@@ -53,10 +53,16 @@ const getMaterials = catchAsync(async (req, res) => {
   if (req.user.role === 'student') {
     const student = await Student.findOne({ userId: req.user._id });
     if (!student) { res.status(404); throw new Error('Student profile not found'); }
-    filter.class = normalizeClass(student.class);
+    filter.class = { $in: getAliasesForClass(student.class) };
     filter.status = 'active'; // Students see only active materials
   } else {
-    if (req.query.class) filter.class = normalizeClass(req.query.class);
+    if (req.query.class) {
+      if (typeof req.query.class === 'string') {
+        filter.class = { $in: getAliasesForClass(req.query.class) };
+      } else if (Array.isArray(req.query.class)) {
+        filter.class = { $in: req.query.class.flatMap(c => getAliasesForClass(c)) };
+      }
+    }
     if (req.query.subject) filter.subject = req.query.subject;
     if (req.query.type) filter.type = req.query.type;
     if (req.query.status) filter.status = req.query.status;
@@ -82,11 +88,11 @@ const getMaterials = catchAsync(async (req, res) => {
  * @access  Private
  */
 const getMaterialsByClass = catchAsync(async (req, res) => {
-  const requestedClass = normalizeClass(req.params.className);
+  const requestedClass = normalizeClassName(req.params.className);
   
   if (req.user.role === 'student') {
     const student = await Student.findOne({ userId: req.user._id }).lean();
-    if (!student || normalizeClass(student.class) !== requestedClass) {
+    if (!student || normalizeClassName(student.class) !== requestedClass) {
       res.status(403);
       throw new Error('Unauthorized access to this class materials');
     }
@@ -96,7 +102,7 @@ const getMaterialsByClass = catchAsync(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const skip = (page - 1) * limit;
 
-  const materials = await StudyMaterial.find({ class: requestedClass })
+  const materials = await StudyMaterial.find({ class: { $in: getAliasesForClass(requestedClass) } })
     .lean()
     .sort({ createdAt: -1 })
     .skip(skip)
@@ -118,7 +124,7 @@ const getMaterialById = catchAsync(async (req, res) => {
   if (material) {
     if (req.user.role === 'student') {
       const student = await Student.findOne({ userId: req.user._id });
-      if (!student || normalizeClass(material.class) !== normalizeClass(student.class)) {
+      if (!student || normalizeClassName(material.class) !== normalizeClassName(student.class)) {
         res.status(403);
         throw new Error('Unauthorized access');
       }
@@ -148,7 +154,7 @@ const updateMaterial = catchAsync(async (req, res) => {
     if (title) material.title = title;
     if (description !== undefined) material.description = description;
     if (subject) material.subject = subject;
-    if (targetClass) material.class = normalizeClass(targetClass);
+    if (targetClass) material.class = normalizeClassName(targetClass);
     if (type) material.type = type;
     if (fileUrl) {
       if (!fileUrl.startsWith('http')) { res.status(400); throw new Error('Invalid URL'); }
