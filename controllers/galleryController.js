@@ -1,4 +1,5 @@
 const Gallery = require('../models/Gallery');
+const cloudinary = require('cloudinary').v2;
 const catchAsync = require('../utils/catchAsync');
 const {
   validateRequiredFields
@@ -142,6 +143,13 @@ const deleteGalleryImage = catchAsync(async (req, res) => {
   const galleryItem = await Gallery.findById(req.params.id);
 
   if (galleryItem) {
+    if (galleryItem.cloudinaryPublicId) {
+      try {
+        await cloudinary.uploader.destroy(galleryItem.cloudinaryPublicId);
+      } catch (err) {
+        console.error('Failed to delete image from Cloudinary:', err);
+      }
+    }
     await galleryItem.deleteOne();
     res.json({ message: 'Gallery image deleted successfully' });
   } else {

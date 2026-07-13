@@ -12,7 +12,10 @@ router.use(protect);
 router.route('/')
   .post(authorize('admin', 'director'), saveTimetable);
 
-router.route('/:class/:section?')
+router.route('/:class')
+  .get(getTimetable);
+
+router.route('/:class/:section')
   .get(getTimetable);
 
 module.exports = router;

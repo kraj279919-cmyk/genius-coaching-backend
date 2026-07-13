@@ -107,6 +107,8 @@ app.use('/api/doubts', require('./routes/doubtRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api/upload', require('./routes/uploadRoutes'));
 app.use('/api/timetable', require('./routes/timetableRoutes'));
+app.use('/api/notifications', require('./routes/notificationRoutes'));
+app.use('/api/tickets', require('./routes/ticketRoutes'));
 // --- Error Handling Middlewares ---
 // Handle 404 (Not Found) errors
 app.use(notFound);
@@ -115,6 +117,10 @@ app.use(errorHandler);
 
 // --- Start Server ---
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server is running in ${process.env.NODE_ENV} mode on port ${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server is running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+  });
+}
+
+module.exports = app;

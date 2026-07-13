@@ -64,7 +64,7 @@ const updateWebsiteContent = catchAsync(async (req, res) => {
   }
 
   // Sanitize huge texts
-  if (req.body.aboutText) req.body.aboutText = sanitizeText(req.body.aboutText, 5000);
+  if (req.body.aboutUs) req.body.aboutUs = sanitizeText(req.body.aboutUs, 5000);
   if (req.body.directorMessage) req.body.directorMessage = sanitizeText(req.body.directorMessage, 5000);
   
   if (content) {
@@ -109,7 +109,7 @@ const updateWebsiteSection = catchAsync(async (req, res) => {
   if (req.body.directorPhotoUrl !== undefined && req.body.directorPhotoUrl !== '' && !req.body.directorPhotoUrl.startsWith('http')) {
     res.status(400); throw new Error('Invalid director photo URL.');
   }
-  if (req.body.aboutText) req.body.aboutText = sanitizeText(req.body.aboutText, 5000);
+  if (req.body.aboutUs) req.body.aboutUs = sanitizeText(req.body.aboutUs, 5000);
   if (req.body.directorMessage) req.body.directorMessage = sanitizeText(req.body.directorMessage, 5000);
 
   Object.assign(content, req.body);
