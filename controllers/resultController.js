@@ -36,6 +36,19 @@ const createResult = catchAsync(async (req, res) => {
 
   const studentExists = await Student.findById(studentId);
   if (!studentExists) { res.status(404); throw new Error('Student not found.'); }
+  
+  const normalizedClass = normalizeClassName(studentClass);
+  
+  if (req.user.role === 'teacher') {
+    const teacher = await require('../models/Teacher').findOne({ userId: req.user._id });
+    if (!teacher) { res.status(404); throw new Error('Teacher profile not found'); }
+    
+    const aliases = getAliasesForClass(normalizedClass);
+    const hasAccess = teacher.assignedClasses && teacher.assignedClasses.some(c => aliases.includes(c));
+    if (!hasAccess) {
+      res.status(403); throw new Error('You are not authorized to upload results for this class');
+    }
+  }
 
   const percentage = Math.round((Number(marksObtained) / Number(totalMarks)) * 100);
   const grade = calculateGrade(percentage);
@@ -44,7 +57,7 @@ const createResult = catchAsync(async (req, res) => {
     studentId,
     examName,
     subject,
-    class: normalizeClassName(studentClass),
+    class: normalizedClass,
     marksObtained: Number(marksObtained),
     totalMarks: Number(totalMarks),
     percentage,
@@ -74,14 +87,43 @@ const getResults = catchAsync(async (req, res) => {
     }
     filter.studentId = student._id;
   } else {
-    if (req.query.studentId) filter.studentId = req.query.studentId;
-    if (req.query.class) {
-      if (typeof req.query.class === 'string') {
-        filter.class = { $in: getAliasesForClass(req.query.class) };
-      } else if (Array.isArray(req.query.class)) {
-        filter.class = { $in: req.query.class.flatMap(c => getAliasesForClass(c)) };
+    if (req.user.role === 'teacher') {
+      const teacher = await require('../models/Teacher').findOne({ userId: req.user._id });
+      if (!teacher) { res.status(404); throw new Error('Teacher profile not found'); }
+      
+      const teacherClassAliases = (teacher.assignedClasses || []).flatMap(c => getAliasesForClass(c));
+      
+      if (req.query.class) {
+        // Teacher is filtering by class, make sure they are allowed
+        const queryClass = typeof req.query.class === 'string' ? [req.query.class] : req.query.class;
+        const queryAliases = queryClass.flatMap(c => getAliasesForClass(c));
+        const allowedAliases = queryAliases.filter(a => teacherClassAliases.includes(a));
+        
+        if (allowedAliases.length === 0) {
+          res.status(403); throw new Error('You are not authorized to view results for the requested class');
+        }
+        filter.class = { $in: allowedAliases };
+      } else {
+        // Teacher is not filtering, limit to their assigned classes
+        if (teacherClassAliases.length > 0) {
+          filter.class = { $in: teacherClassAliases };
+        } else {
+           // Teacher has no assigned classes, show no results
+           filter.class = { $in: ['__none__'] };
+        }
+      }
+    } else {
+      // Admin logic
+      if (req.query.class) {
+        if (typeof req.query.class === 'string') {
+          filter.class = { $in: getAliasesForClass(req.query.class) };
+        } else if (Array.isArray(req.query.class)) {
+          filter.class = { $in: req.query.class.flatMap(c => getAliasesForClass(c)) };
+        }
       }
     }
+    
+    if (req.query.studentId) filter.studentId = req.query.studentId;
     if (req.query.examName) filter.examName = req.query.examName;
     if (req.query.subject) filter.subject = req.query.subject;
   }
@@ -244,6 +286,17 @@ const updateResult = catchAsync(async (req, res) => {
   const result = await Result.findById(req.params.id);
 
   if (result) {
+    if (req.user.role === 'teacher') {
+      const teacher = await require('../models/Teacher').findOne({ userId: req.user._id });
+      if (!teacher) { res.status(404); throw new Error('Teacher profile not found'); }
+      
+      const aliases = getAliasesForClass(result.class);
+      const hasAccess = teacher.assignedClasses && teacher.assignedClasses.some(c => aliases.includes(c));
+      
+      if (!hasAccess) {
+        res.status(403); throw new Error('You are not authorized to edit this result');
+      }
+    }
     const { marksObtained, totalMarks, remarks, reportUrl } = req.body;
     
     if (marksObtained !== undefined) result.marksObtained = Number(marksObtained);
@@ -277,6 +330,17 @@ const deleteResult = catchAsync(async (req, res) => {
   const result = await Result.findById(req.params.id);
 
   if (result) {
+    if (req.user.role === 'teacher') {
+      const teacher = await require('../models/Teacher').findOne({ userId: req.user._id });
+      if (!teacher) { res.status(404); throw new Error('Teacher profile not found'); }
+      
+      const aliases = getAliasesForClass(result.class);
+      const hasAccess = teacher.assignedClasses && teacher.assignedClasses.some(c => aliases.includes(c));
+      
+      if (!hasAccess) {
+        res.status(403); throw new Error('You are not authorized to delete this result');
+      }
+    }
     await result.deleteOne();
     res.json({ message: 'Result deleted successfully' });
   } else {
