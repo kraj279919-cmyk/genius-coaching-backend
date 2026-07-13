@@ -76,7 +76,7 @@ const getAliasesForClass = (canonicalClass) => {
   const roman = numToRoman[num];
   const suffix = (num === 1) ? 'st' : (num === 2) ? 'nd' : (num === 3) ? 'rd' : 'th';
   
-  return [
+  const aliases = [
     normalized,             // "Class 9"
     `${num}`,               // "9"
     `${num}${suffix}`,      // "9th"
@@ -86,6 +86,24 @@ const getAliasesForClass = (canonicalClass) => {
     `class ${num}`,         // "class 9"
     `class ${roman}`        // "class ix"
   ];
+  
+  // To prevent breaking apps that saved "Class - Stream" as the class name
+  if (num === 11 || num === 12) {
+    aliases.push(`${roman} - Science`);
+    aliases.push(`${roman} - Commerce`);
+    aliases.push(`${roman} - Arts`);
+    aliases.push(`${roman}-Science`);
+    aliases.push(`${roman}-Commerce`);
+    aliases.push(`Class ${roman} - Science`);
+    aliases.push(`Class ${roman} - Commerce`);
+    aliases.push(`${num}th - Science`);
+    aliases.push(`${num}th - Commerce`);
+    // Also lowercase/capitalized variations just in case
+    aliases.push(`${roman} - science`);
+    aliases.push(`${roman} - commerce`);
+  }
+  
+  return aliases;
 };
 
 /**
