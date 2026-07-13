@@ -26,6 +26,17 @@ const createMaterial = catchAsync(async (req, res) => {
 
   const normalizedClass = normalizeClassName(targetClass);
 
+  if (req.user.role === 'teacher') {
+    const teacher = await require('../models/Teacher').findOne({ userId: req.user._id });
+    if (!teacher) { res.status(404); throw new Error('Teacher profile not found'); }
+    
+    const aliases = getAliasesForClass(normalizedClass);
+    const hasAccess = teacher.assignedClasses && teacher.assignedClasses.some(c => aliases.includes(c));
+    if (!hasAccess) {
+      res.status(403); throw new Error('You are not authorized to upload material for this class');
+    }
+  }
+
   const material = await StudyMaterial.create({
     title,
     description: description || '',
@@ -92,9 +103,20 @@ const getMaterialsByClass = catchAsync(async (req, res) => {
   
   if (req.user.role === 'student') {
     const student = await Student.findOne({ userId: req.user._id }).lean();
-    if (!student || normalizeClassName(student.class) !== requestedClass) {
+    if (!student || !getAliasesForClass(student.class).includes(requestedClass)) {
       res.status(403);
       throw new Error('Unauthorized access to this class materials');
+    }
+  }
+
+  if (req.user.role === 'teacher') {
+    const teacher = await require('../models/Teacher').findOne({ userId: req.user._id });
+    if (!teacher) { res.status(404); throw new Error('Teacher profile not found'); }
+    
+    const aliases = getAliasesForClass(requestedClass);
+    const hasAccess = teacher.assignedClasses && teacher.assignedClasses.some(c => aliases.includes(c));
+    if (!hasAccess) {
+      res.status(403); throw new Error('You are not authorized to view materials for this class');
     }
   }
 
@@ -124,9 +146,18 @@ const getMaterialById = catchAsync(async (req, res) => {
   if (material) {
     if (req.user.role === 'student') {
       const student = await Student.findOne({ userId: req.user._id });
-      if (!student || normalizeClassName(material.class) !== normalizeClassName(student.class)) {
+      if (!student || !getAliasesForClass(material.class).includes(student.class) && !getAliasesForClass(student.class).includes(material.class)) {
         res.status(403);
         throw new Error('Unauthorized access');
+      }
+    }
+    if (req.user.role === 'teacher') {
+      const teacher = await require('../models/Teacher').findOne({ userId: req.user._id });
+      if (!teacher) { res.status(404); throw new Error('Teacher profile not found'); }
+      const aliases = getAliasesForClass(material.class);
+      const hasAccess = teacher.assignedClasses && teacher.assignedClasses.some(c => aliases.includes(c));
+      if (!hasAccess) {
+        res.status(403); throw new Error('You are not authorized to view this material');
       }
     }
     res.json(material);
@@ -145,6 +176,18 @@ const updateMaterial = catchAsync(async (req, res) => {
   const material = await StudyMaterial.findById(req.params.id);
 
   if (material) {
+    if (req.user.role === 'teacher') {
+      const teacher = await require('../models/Teacher').findOne({ userId: req.user._id });
+      if (!teacher) { res.status(404); throw new Error('Teacher profile not found'); }
+      
+      const aliases = getAliasesForClass(material.class);
+      const hasAccess = teacher.assignedClasses && teacher.assignedClasses.some(c => aliases.includes(c));
+      
+      if (!hasAccess) {
+        res.status(403); throw new Error('You are not authorized to edit this material');
+      }
+    }
+
     const { title, description, class: targetClass, subject, type, fileUrl, cloudinaryPublicId, status } = req.body;
     
     if (req.body.title !== undefined && req.body.title.trim() === '') { res.status(400); throw new Error("Title is required."); }
@@ -181,6 +224,18 @@ const deleteMaterial = catchAsync(async (req, res) => {
   const material = await StudyMaterial.findById(req.params.id);
 
   if (material) {
+    if (req.user.role === 'teacher') {
+      const teacher = await require('../models/Teacher').findOne({ userId: req.user._id });
+      if (!teacher) { res.status(404); throw new Error('Teacher profile not found'); }
+      
+      const aliases = getAliasesForClass(material.class);
+      const hasAccess = teacher.assignedClasses && teacher.assignedClasses.some(c => aliases.includes(c));
+      
+      if (!hasAccess) {
+        res.status(403); throw new Error('You are not authorized to delete this material');
+      }
+    }
+
     await material.deleteOne();
     res.json({ message: 'Material deleted successfully' });
   } else {
