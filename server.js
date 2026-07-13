@@ -89,6 +89,7 @@ app.use('/api/teachers', require('./routes/teacherRoutes'));
 app.use('/api/notices', require('./routes/noticeRoutes'));
 app.use('/api/materials', require('./routes/materialRoutes'));
 app.use('/api/attendance', require('./routes/attendanceRoutes'));
+app.use('/api/teacher-attendance', require('./routes/teacherAttendanceRoutes'));
 app.use('/api/homework', require('./routes/homeworkRoutes'));
 app.use('/api/results', require('./routes/resultRoutes'));
 app.use('/api/fees', require('./routes/feeRoutes'));

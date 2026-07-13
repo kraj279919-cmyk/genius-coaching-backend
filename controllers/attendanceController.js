@@ -26,6 +26,20 @@ const createAttendance = catchAsync(async (req, res) => {
   const studentExists = await Student.findById(studentId);
   if (!studentExists) { res.status(404); throw new Error('Student not found.'); }
 
+  const normalizedClass = normalizeClassName(studentClass);
+
+  if (req.user.role === 'teacher') {
+    const teacher = await require('../models/Teacher').findOne({ userId: req.user._id });
+    if (!teacher) { res.status(404); throw new Error('Teacher profile not found'); }
+    
+    // Check if teacher's assignedClasses contains any alias of the student's class
+    const aliases = getAliasesForClass(normalizedClass);
+    const hasAccess = teacher.assignedClasses && teacher.assignedClasses.some(c => aliases.includes(c));
+    if (!hasAccess) {
+      res.status(403); throw new Error('You are not authorized to mark attendance for this class');
+    }
+  }
+
   // Check if attendance already exists for this student on this date
   const startOfDay = new Date(date);
   startOfDay.setHours(0, 0, 0, 0);
@@ -42,8 +56,6 @@ const createAttendance = catchAsync(async (req, res) => {
     throw new Error('Attendance already marked for this date');
   }
 
-  const normalizedClass = normalizeClassName(studentClass);
-
   const attendance = await Attendance.create({
     studentId,
     date,
@@ -54,9 +66,147 @@ const createAttendance = catchAsync(async (req, res) => {
     remarks,
   });
 
-  const populated = await Attendance.findById(attendance._id).populate('studentId', 'name studentId class section');
+const populated = await Attendance.findById(attendance._id).populate('studentId', 'name studentId class section');
   res.status(201).json(populated);
 });
+
+/**
+ * @desc    Bulk mark attendance for an entire class
+ * @route   POST /api/attendance/bulk
+ * @access  Private (Admin / Teacher)
+ */
+const bulkMarkAttendance = catchAsync(async (req, res) => {
+  const { class: targetClass, date, status } = req.body;
+
+  if (!targetClass || !date || !status) {
+    res.status(400); throw new Error('Class, date, and status are required');
+  }
+
+  if (!validateDate(date)) { res.status(400); throw new Error('Invalid date format.'); }
+  if (!['present', 'absent', 'late', 'leave'].includes(status.toLowerCase())) { res.status(400); throw new Error('Invalid attendance status.'); }
+
+  const normalizedClass = normalizeClassName(targetClass);
+
+  if (req.user.role === 'teacher') {
+    const teacher = await require('../models/Teacher').findOne({ userId: req.user._id });
+    if (!teacher) { res.status(404); throw new Error('Teacher profile not found'); }
+    
+    // Check if teacher's assignedClasses contains any alias of the target class
+    const aliases = getAliasesForClass(normalizedClass);
+    const hasAccess = teacher.assignedClasses && teacher.assignedClasses.some(c => aliases.includes(c));
+    if (!hasAccess) {
+      res.status(403); throw new Error('You are not authorized to mark attendance for this class');
+    }
+  }
+
+  // 1. Get all active students in the class
+  const students = await Student.find({
+    class: { $in: getAliasesForClass(normalizedClass) },
+    status: 'active'
+  }).lean();
+
+  if (students.length === 0) {
+    res.status(404); throw new Error('No active students found in this class');
+  }
+
+  // 2. Define start/end of day
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(date);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  // 3. Find existing attendance records for these students on this day
+  const existingRecords = await Attendance.find({
+    date: { $gte: startOfDay, $lte: endOfDay },
+    studentId: { $in: students.map(s => s._id) }
+  }).lean();
+
+  const existingStudentIds = new Set(existingRecords.map(r => r.studentId.toString()));
+
+  // 4. Create new records for students who don't have attendance yet
+  const newRecords = students
+    .filter(s => !existingStudentIds.has(s._id.toString()))
+    .map(s => ({
+      studentId: s._id,
+      date,
+      status: status.toLowerCase(),
+      class: normalizedClass,
+      section: s.section,
+      markedBy: req.user._id,
+      remarks: 'Bulk marked',
+    }));
+
+  if (newRecords.length > 0) {
+    await Attendance.insertMany(newRecords);
+  }
+
+  res.status(201).json({
+    message: `Marked attendance for ${newRecords.length} students. ${existingStudentIds.size} already marked.`,
+    markedCount: newRecords.length,
+    skippedCount: existingStudentIds.size
+  });
+});
+
+/**
+ * @desc    Bulk upsert attendance (array of records)
+ * @route   POST /api/attendance/bulk-upsert
+ * @access  Private (Admin / Teacher)
+ */
+const bulkUpsertAttendance = catchAsync(async (req, res) => {
+  const { records } = req.body; // Array of { studentId, date, status, class }
+  
+  if (!Array.isArray(records) || records.length === 0) {
+    res.status(400); throw new Error('No records provided');
+  }
+
+  // To enforce teacher class restrictions, we must check if they are authorized for the classes in the payload
+  if (req.user.role === 'teacher') {
+    const teacher = await require('../models/Teacher').findOne({ userId: req.user._id });
+    if (!teacher) { res.status(404); throw new Error('Teacher profile not found'); }
+    
+    // Check if teacher's assignedClasses contains the classes in the records
+    const requestedClasses = [...new Set(records.map(r => r.class))];
+    for (const reqClass of requestedClasses) {
+      const aliases = getAliasesForClass(normalizeClassName(reqClass));
+      const hasAccess = teacher.assignedClasses && teacher.assignedClasses.some(c => aliases.includes(c));
+      if (!hasAccess) {
+        res.status(403); throw new Error(`You are not authorized to mark attendance for class: ${reqClass}`);
+      }
+    }
+  }
+
+  // Iterate and process
+  let successCount = 0;
+  for (const record of records) {
+    if (!record.studentId || !record.date || !record.status) continue;
+    
+    const startOfDay = new Date(record.date); startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(record.date); endOfDay.setHours(23, 59, 59, 999);
+    
+    const existing = await Attendance.findOne({
+      studentId: record.studentId,
+      date: { $gte: startOfDay, $lte: endOfDay }
+    });
+
+    if (existing) {
+      existing.status = record.status.toLowerCase();
+      await existing.save();
+    } else {
+      await Attendance.create({
+        studentId: record.studentId,
+        date: record.date,
+        status: record.status.toLowerCase(),
+        class: normalizeClassName(record.class),
+        markedBy: req.user._id,
+        remarks: record.remarks || '',
+      });
+    }
+    successCount++;
+  }
+
+  res.status(200).json({ message: `Successfully processed ${successCount} attendance records.` });
+});
+
 
 /**
  * @desc    Get all attendance records
@@ -143,6 +293,20 @@ const getAttendanceByClass = catchAsync(async (req, res) => {
   if (req.user.role === 'student') {
     res.status(403);
     throw new Error('Students cannot view class attendance');
+  }
+
+  const normalizedClass = normalizeClassName(req.params.className);
+
+  if (req.user.role === 'teacher') {
+    const teacher = await require('../models/Teacher').findOne({ userId: req.user._id });
+    if (!teacher) { res.status(404); throw new Error('Teacher profile not found'); }
+    
+    // Check if teacher's assignedClasses contains any alias of the target class
+    const aliases = getAliasesForClass(normalizedClass);
+    const hasAccess = teacher.assignedClasses && teacher.assignedClasses.some(c => aliases.includes(c));
+    if (!hasAccess) {
+      res.status(403); throw new Error('You are not authorized to view attendance for this class');
+    }
   }
 
   const filter = { class: { $in: getAliasesForClass(req.params.className) } };
@@ -256,6 +420,8 @@ const deleteAttendance = catchAsync(async (req, res) => {
 
 module.exports = {
   createAttendance,
+  bulkMarkAttendance,
+  bulkUpsertAttendance,
   getAttendance,
   getAttendanceByStudent,
   getAttendanceByClass,

@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const {
   createAttendance,
+  bulkMarkAttendance,
+  bulkUpsertAttendance,
   getAttendance,
   getAttendanceByStudent,
   getAttendanceByClass,
@@ -22,6 +24,12 @@ router.route('/class/:className')
 
 router.route('/student/:studentId')
   .get(getAttendanceByStudent);
+
+router.route('/bulk')
+  .post(authorize('admin', 'director', 'teacher'), bulkMarkAttendance);
+
+router.route('/bulk-upsert')
+  .post(authorize('admin', 'director', 'teacher'), bulkUpsertAttendance);
 
 router.route('/')
   .get(getAttendance)
