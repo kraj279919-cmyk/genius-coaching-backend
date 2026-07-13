@@ -93,25 +93,36 @@ const loginUser = catchAsync(async (req, res) => {
   }
 });
 
-/**
- * @desc    Get current logged in user profile
- * @route   GET /api/auth/profile
- * @access  Private
- */
 const getUserProfile = catchAsync(async (req, res) => {
-  // req.user is set by the authMiddleware
-  const user = await User.findById(req.user._id);
+  const user = await User.findById(req.user._id).lean();
 
   if (user) {
-    res.json({
+    let profileData = {
       _id: user._id,
       name: user.name,
       email: user.email,
+      phone: user.phone,
       role: user.role,
       profileImage: user.profileImage,
-    });
+    };
+
+    try {
+      if (user.role === 'student') {
+        const Student = require('../models/Student');
+        const studentDoc = await Student.findOne({ userId: user._id }).lean();
+        if (studentDoc) profileData = { ...profileData, ...studentDoc, _id: user._id };
+      } else if (user.role === 'teacher') {
+        const Teacher = require('../models/Teacher');
+        const teacherDoc = await Teacher.findOne({ userId: user._id }).lean();
+        if (teacherDoc) profileData = { ...profileData, ...teacherDoc, _id: user._id };
+      }
+    } catch (err) {
+      console.error('Error fetching extended profile data:', err);
+    }
+
+    res.json(profileData);
   } else {
-    res.status(404); // Not found
+    res.status(404);
     throw new Error('User not found');
   }
 });
@@ -135,25 +146,43 @@ const updateUserProfile = catchAsync(async (req, res) => {
     }
 
     const updatedUser = await user.save();
-
-    // Synchronize to Student or Teacher document if they exist
-    if (newImage) {
-      if (user.role === 'student') {
-        const Student = require('../models/Student');
-        await Student.findOneAndUpdate({ userId: user._id }, { profileImage: newImage });
-      } else if (user.role === 'teacher') {
-        const Teacher = require('../models/Teacher');
-        await Teacher.findOneAndUpdate({ userId: user._id }, { profileImage: newImage });
-      }
-    }
-
-    res.json({
+    let profileData = {
       _id: updatedUser._id,
       name: updatedUser.name,
       email: updatedUser.email,
+      phone: updatedUser.phone,
       role: updatedUser.role,
       profileImage: updatedUser.profileImage,
-    });
+    };
+
+    // Synchronize to Student or Teacher document if they exist
+    try {
+      if (newImage) {
+        if (user.role === 'student') {
+          const Student = require('../models/Student');
+          await Student.findOneAndUpdate({ userId: user._id }, { profileImage: newImage });
+        } else if (user.role === 'teacher') {
+          const Teacher = require('../models/Teacher');
+          await Teacher.findOneAndUpdate({ userId: user._id }, { profileImage: newImage });
+        }
+      }
+      
+      // Fetch full document to return merged data
+      if (user.role === 'student') {
+        const Student = require('../models/Student');
+        const studentDoc = await Student.findOne({ userId: user._id }).lean();
+        if (studentDoc) profileData = { ...profileData, ...studentDoc, _id: user._id };
+      } else if (user.role === 'teacher') {
+        const Teacher = require('../models/Teacher');
+        const teacherDoc = await Teacher.findOne({ userId: user._id }).lean();
+        if (teacherDoc) profileData = { ...profileData, ...teacherDoc, _id: user._id };
+      }
+    } catch (syncError) {
+      console.error('Error synchronizing profile data:', syncError);
+      // Do not throw; we still want to return the updated user successfully
+    }
+
+    res.json(profileData);
   } else {
     res.status(404);
     throw new Error('User not found');
