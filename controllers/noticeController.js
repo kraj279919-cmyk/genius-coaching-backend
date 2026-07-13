@@ -37,7 +37,15 @@ const createNotice = catchAsync(async (req, res) => {
       res.status(403);
       throw new Error('Teachers can only create notices targeted to a specific class');
     }
-    // Assume teacher sets targetClass to their assigned class. (We're trusting the frontend here, or could check assignedClasses)
+    
+    const teacher = await require('../models/Teacher').findOne({ userId: req.user._id });
+    if (!teacher) { res.status(404); throw new Error('Teacher profile not found'); }
+    
+    const aliases = getAliasesForClass(normalizeClassName(targetClass));
+    const hasAccess = teacher.assignedClasses && teacher.assignedClasses.some(c => aliases.includes(c));
+    if (!hasAccess) {
+      res.status(403); throw new Error('You are not authorized to create notices for this class');
+    }
   } else if (req.user.role === 'student') {
     res.status(403);
     throw new Error('Students cannot create notices');
