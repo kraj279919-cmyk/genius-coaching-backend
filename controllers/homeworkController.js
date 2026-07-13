@@ -24,6 +24,18 @@ const createHomework = catchAsync(async (req, res) => {
 
   const normalizedClass = normalizeClassName(targetClass);
 
+  if (req.user.role === 'teacher') {
+    const teacher = await require('../models/Teacher').findOne({ userId: req.user._id });
+    if (!teacher) { res.status(404); throw new Error('Teacher profile not found'); }
+    
+    // Check if teacher's assignedClasses contains any alias of the target class
+    const aliases = getAliasesForClass(normalizedClass);
+    const hasAccess = teacher.assignedClasses && teacher.assignedClasses.some(c => aliases.includes(c));
+    if (!hasAccess) {
+      res.status(403); throw new Error('You are not authorized to assign homework for this class');
+    }
+  }
+
   const existing = await Homework.findOne({ title, class: normalizedClass, dueDate });
   if (existing) {
     res.status(400); throw new Error('Homework with this title, class, and due date already exists.');
@@ -94,9 +106,20 @@ const getHomeworkByClass = catchAsync(async (req, res) => {
 
   if (req.user.role === 'student') {
     const student = await Student.findOne({ userId: req.user._id }).lean();
-    if (!student || normalizeClassName(student.class) !== requestedClass) {
+    if (!student || !getAliasesForClass(student.class).includes(requestedClass)) {
       res.status(403);
       throw new Error('Unauthorized access to this class homework');
+    }
+  }
+
+  if (req.user.role === 'teacher') {
+    const teacher = await require('../models/Teacher').findOne({ userId: req.user._id });
+    if (!teacher) { res.status(404); throw new Error('Teacher profile not found'); }
+    
+    const aliases = getAliasesForClass(requestedClass);
+    const hasAccess = teacher.assignedClasses && teacher.assignedClasses.some(c => aliases.includes(c));
+    if (!hasAccess) {
+      res.status(403); throw new Error('You are not authorized to view homework for this class');
     }
   }
 
@@ -126,9 +149,18 @@ const getHomeworkById = catchAsync(async (req, res) => {
   if (homework) {
     if (req.user.role === 'student') {
       const student = await Student.findOne({ userId: req.user._id });
-      if (!student || homework.class !== student.class) {
+      if (!student || !getAliasesForClass(homework.class).includes(student.class) && !getAliasesForClass(student.class).includes(homework.class)) {
         res.status(403);
         throw new Error('Unauthorized access');
+      }
+    }
+    if (req.user.role === 'teacher') {
+      const teacher = await require('../models/Teacher').findOne({ userId: req.user._id });
+      if (!teacher) { res.status(404); throw new Error('Teacher profile not found'); }
+      const aliases = getAliasesForClass(homework.class);
+      const hasAccess = teacher.assignedClasses && teacher.assignedClasses.some(c => aliases.includes(c));
+      if (!hasAccess) {
+        res.status(403); throw new Error('You are not authorized to view this homework');
       }
     }
     res.json(homework);
@@ -147,6 +179,18 @@ const updateHomework = catchAsync(async (req, res) => {
   const homework = await Homework.findById(req.params.id);
 
   if (homework) {
+    if (req.user.role === 'teacher') {
+      const teacher = await require('../models/Teacher').findOne({ userId: req.user._id });
+      if (!teacher) { res.status(404); throw new Error('Teacher profile not found'); }
+      
+      const aliases = getAliasesForClass(homework.class);
+      const hasAccess = teacher.assignedClasses && teacher.assignedClasses.some(c => aliases.includes(c));
+      
+      if (!hasAccess) {
+        res.status(403); throw new Error('You are not authorized to edit this homework');
+      }
+    }
+
     const { title, description, subject, class: targetClass, dueDate, attachmentUrl, attachmentType, status } = req.body;
     
     if (req.body.title !== undefined && req.body.title.trim() === '') { res.status(400); throw new Error("Title is required."); }
@@ -181,6 +225,18 @@ const deleteHomework = catchAsync(async (req, res) => {
   const homework = await Homework.findById(req.params.id);
 
   if (homework) {
+    if (req.user.role === 'teacher') {
+      const teacher = await require('../models/Teacher').findOne({ userId: req.user._id });
+      if (!teacher) { res.status(404); throw new Error('Teacher profile not found'); }
+      
+      const aliases = getAliasesForClass(homework.class);
+      const hasAccess = teacher.assignedClasses && teacher.assignedClasses.some(c => aliases.includes(c));
+      
+      if (!hasAccess) {
+        res.status(403); throw new Error('You are not authorized to delete this homework');
+      }
+    }
+
     await homework.deleteOne();
     res.json({ message: 'Homework deleted successfully' });
   } else {
