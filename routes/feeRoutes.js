@@ -21,7 +21,7 @@ router.route('/student/:studentId')
   .get(authorize('admin', 'director', 'student'), getFeesByStudentId);
 
 router.route('/')
-  .get(authorize('admin', 'director'), getFeeRecords)
+  .get(authorize('admin', 'director', 'student'), getFeeRecords)
   .post(authorize('admin', 'director'), createFeeRecord);
 
 router.route('/:id')
